@@ -1,0 +1,37 @@
+# Flutter/Dart/Pub related
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+.pub-cache/
+build/
+*.dart.js
+*.info.json
+.flutter-plugins
+.metadata
+# Uncomment this line if you don't want to track generated intl messages.
+# l10n/*
+
+# Obfuscation
+*.symbols
+
+# IDEs and editors
+.idea/
+.vscode/
+*.iml
+
+# Visual Studio Code
+.history/
+
+# MacOS files
+.DS_Store
+
+# Certificates
+*.cer
+*.crt
+*.pem
+
+# Miscellaneous
+*.log
+*.tmp
