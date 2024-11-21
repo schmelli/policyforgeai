@@ -37,6 +37,35 @@ class User extends Equatable {
         isActive,
       ];
 
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'email': email,
+        'displayName': displayName,
+        'role': role.name,
+        'teams': teams,
+        'preferences': preferences.toJson(),
+        'createdAt': createdAt.toIso8601String(),
+        'lastLoginAt': lastLoginAt.toIso8601String(),
+        'isActive': isActive,
+      };
+
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      id: json['id'] as String,
+      email: json['email'] as String,
+      displayName: json['displayName'] as String,
+      role: UserRole.values.firstWhere(
+        (e) => e.name == json['role'],
+        orElse: () => UserRole.viewer,
+      ),
+      teams: (json['teams'] as List<dynamic>).map((e) => e as String).toList(),
+      preferences: UserPreferences.fromJson(json['preferences'] as Map<String, dynamic>),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      lastLoginAt: DateTime.parse(json['lastLoginAt'] as String),
+      isActive: json['isActive'] as bool,
+    );
+  }
+
   User copyWith({
     String? displayName,
     UserRole? role,
@@ -106,6 +135,32 @@ class UserPreferences extends Equatable {
         editor,
         ai,
       ];
+
+  Map<String, dynamic> toJson() => {
+        'theme': theme,
+        'locale': locale,
+        'enableNotifications': enableNotifications,
+        'notifications': notifications.toJson(),
+        'editor': editor.toJson(),
+        'ai': ai.toJson(),
+      };
+
+  factory UserPreferences.fromJson(Map<String, dynamic> json) {
+    return UserPreferences(
+      theme: json['theme'] as String? ?? 'light',
+      locale: json['locale'] as String? ?? 'en',
+      enableNotifications: json['enableNotifications'] as bool? ?? true,
+      notifications: json['notifications'] != null
+          ? NotificationPreferences.fromJson(json['notifications'] as Map<String, dynamic>)
+          : NotificationPreferences.defaults(),
+      editor: json['editor'] != null
+          ? EditorPreferences.fromJson(json['editor'] as Map<String, dynamic>)
+          : EditorPreferences.defaults(),
+      ai: json['ai'] != null
+          ? AIPreferences.fromJson(json['ai'] as Map<String, dynamic>)
+          : AIPreferences.defaults(),
+    );
+  }
 }
 
 /// Notification preferences
@@ -146,6 +201,26 @@ class NotificationPreferences extends Equatable {
         systemUpdates,
         notificationMethod,
       ];
+
+  Map<String, dynamic> toJson() => {
+        'documentUpdates': documentUpdates,
+        'comments': comments,
+        'mentions': mentions,
+        'reviews': reviews,
+        'systemUpdates': systemUpdates,
+        'notificationMethod': notificationMethod,
+      };
+
+  factory NotificationPreferences.fromJson(Map<String, dynamic> json) {
+    return NotificationPreferences(
+      documentUpdates: json['documentUpdates'] as bool? ?? true,
+      comments: json['comments'] as bool? ?? true,
+      mentions: json['mentions'] as bool? ?? true,
+      reviews: json['reviews'] as bool? ?? true,
+      systemUpdates: json['systemUpdates'] as bool? ?? true,
+      notificationMethod: json['notificationMethod'] as String? ?? 'both',
+    );
+  }
 }
 
 /// Editor preferences
@@ -194,6 +269,30 @@ class EditorPreferences extends Equatable {
         darkMode,
         keyBindings,
       ];
+
+  Map<String, dynamic> toJson() => {
+        'fontFamily': fontFamily,
+        'fontSize': fontSize,
+        'lineNumbers': lineNumbers,
+        'spellCheck': spellCheck,
+        'autoSave': autoSave,
+        'autoSaveInterval': autoSaveInterval,
+        'darkMode': darkMode,
+        'keyBindings': keyBindings,
+      };
+
+  factory EditorPreferences.fromJson(Map<String, dynamic> json) {
+    return EditorPreferences(
+      fontFamily: json['fontFamily'] as String? ?? 'Inter',
+      fontSize: (json['fontSize'] as num?)?.toDouble() ?? 14,
+      lineNumbers: json['lineNumbers'] as bool? ?? true,
+      spellCheck: json['spellCheck'] as bool? ?? true,
+      autoSave: json['autoSave'] as bool? ?? true,
+      autoSaveInterval: json['autoSaveInterval'] as int? ?? 30,
+      darkMode: json['darkMode'] as bool? ?? false,
+      keyBindings: Map<String, dynamic>.from(json['keyBindings'] as Map? ?? {}),
+    );
+  }
 }
 
 /// AI feature preferences
@@ -239,4 +338,22 @@ class AIPreferences extends Equatable {
         enabledFeatures,
         customSettings,
       ];
+
+  Map<String, dynamic> toJson() => {
+        'enableSuggestions': enableSuggestions,
+        'enableAnalysis': enableAnalysis,
+        'enableAutoComplete': enableAutoComplete,
+        'enabledFeatures': enabledFeatures,
+        'customSettings': customSettings,
+      };
+
+  factory AIPreferences.fromJson(Map<String, dynamic> json) {
+    return AIPreferences(
+      enableSuggestions: json['enableSuggestions'] as bool? ?? true,
+      enableAnalysis: json['enableAnalysis'] as bool? ?? true,
+      enableAutoComplete: json['enableAutoComplete'] as bool? ?? true,
+      enabledFeatures: Map<String, bool>.from(json['enabledFeatures'] as Map? ?? {}),
+      customSettings: Map<String, dynamic>.from(json['customSettings'] as Map? ?? {}),
+    );
+  }
 }
