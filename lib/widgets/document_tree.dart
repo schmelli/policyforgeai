@@ -3,13 +3,13 @@ import '../models/project.dart';
 
 class DocumentTree extends StatefulWidget {
   final List<DocumentNode> nodes;
+  final Function(String name, String? parentId)? onCreateFolder;
+  final Function(String name, String? parentId)? onCreateDocument;
   final Function(DocumentNode)? onNodeSelected;
-  final Function(String parentId)? onCreateFolder;
-  final Function(String parentId)? onCreateDocument;
 
   const DocumentTree({
     super.key,
-    required this.nodes,
+    this.nodes = const [],
     this.onNodeSelected,
     this.onCreateFolder,
     this.onCreateDocument,
@@ -21,6 +21,52 @@ class DocumentTree extends StatefulWidget {
 
 class _DocumentTreeState extends State<DocumentTree> {
   Set<String> expandedNodes = {};
+  final TextEditingController _nameController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _showCreateDialog({
+    required String title,
+    required Function(String name, String? parentId) onSubmit,
+    String? parentId,
+  }) async {
+    _nameController.clear();
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(
+              labelText: 'Name',
+              hintText: 'Enter name',
+            ),
+            autofocus: true,
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            TextButton(
+              child: const Text('Create'),
+              onPressed: () {
+                if (_nameController.text.isNotEmpty) {
+                  onSubmit(_nameController.text, parentId);
+                  Navigator.of(context).pop();
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,12 +78,22 @@ class _DocumentTreeState extends State<DocumentTree> {
           actions: [
             IconButton(
               icon: const Icon(Icons.create_new_folder),
-              onPressed: () => widget.onCreateFolder?.call(''),
+              onPressed: widget.onCreateFolder == null
+                  ? null
+                  : () => _showCreateDialog(
+                        title: 'Create Folder',
+                        onSubmit: widget.onCreateFolder!,
+                      ),
               tooltip: 'Create Folder',
             ),
             IconButton(
               icon: const Icon(Icons.note_add),
-              onPressed: () => widget.onCreateDocument?.call(''),
+              onPressed: widget.onCreateDocument == null
+                  ? null
+                  : () => _showCreateDialog(
+                        title: 'Create Document',
+                        onSubmit: widget.onCreateDocument!,
+                      ),
               tooltip: 'Create Document',
             ),
           ],

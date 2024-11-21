@@ -1,10 +1,7 @@
 import 'dart:convert';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/project.dart';
-import '../models/document.dart';
 import '../models/chat.dart';
-import '../utils/settings_migrator.dart';
 
 class StorageService {
   static const String _projectsBox = 'projects';
@@ -108,8 +105,15 @@ class StorageService {
   }
 
   Future<String?> getDocumentContent(String documentId) async {
-    final box = await Hive.openBox<String>(_documentsBox);
-    return box.get(documentId);
+    // First, find which project this document belongs to
+    final projectsBox = Hive.box(_projectsBox);
+    for (final projectId in projectsBox.keys) {
+      final document = await loadDocument(projectId.toString(), documentId);
+      if (document != null) {
+        return document.document.content;
+      }
+    }
+    return null;
   }
 
   Future<void> saveProjectSettings(ProjectSettings settings) async {

@@ -78,7 +78,10 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   })  : _aiService = aiService,
         _storageService = storageService,
         _documentId = documentId,
-        super(const ChatLoaded(thread: ChatThread(messages: []), isProcessing: false)) {
+        super(ChatLoaded(
+          thread: ChatThread.create(documentId: documentId),
+          isProcessing: false,
+        )) {
     on<SendMessage>(_onSendMessage);
     on<ClearChat>(_onClearChat);
     _loadChatThread();
@@ -86,7 +89,8 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
 
   Future<void> _loadChatThread() async {
     try {
-      final thread = await _storageService.loadChatThread(_documentId);
+      final thread = await _storageService.loadChatThread(_documentId) ??
+          ChatThread.create(documentId: _documentId);
       emit(ChatLoaded(thread: thread, isProcessing: false));
     } catch (e) {
       emit(ChatError(message: 'Failed to load chat thread: $e'));
@@ -97,15 +101,15 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     if (state is! ChatLoaded) return;
 
     final currentState = state as ChatLoaded;
-    final userMessage = ChatMessage(
+    final userMessage = ChatMessage.create(
       role: MessageRole.user,
       content: event.message,
-      timestamp: DateTime.now(),
     );
 
     // Add user message and show processing state
-    final updatedThread = ChatThread(
+    final updatedThread = currentState.thread.copyWith(
       messages: [...currentState.thread.messages, userMessage],
+      lastModified: DateTime.now(),
     );
     emit(ChatLoaded(thread: updatedThread, isProcessing: true));
 
@@ -120,14 +124,14 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
       );
 
       // Add AI response
-      final aiMessage = ChatMessage(
+      final aiMessage = ChatMessage.create(
         role: MessageRole.assistant,
         content: response,
-        timestamp: DateTime.now(),
       );
 
-      final finalThread = ChatThread(
+      final finalThread = updatedThread.copyWith(
         messages: [...updatedThread.messages, aiMessage],
+        lastModified: DateTime.now(),
       );
 
       // Save thread and update state
@@ -141,7 +145,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
 
   Future<void> _onClearChat(ClearChat event, Emitter<ChatState> emit) async {
     try {
-      final emptyThread = ChatThread(messages: const []);
+      final emptyThread = ChatThread.create(documentId: _documentId);
       await _storageService.saveChatThread(_documentId, emptyThread);
       emit(ChatLoaded(thread: emptyThread, isProcessing: false));
     } catch (e) {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import '../models/project.dart';
+import '../services/document_export_service.dart';
+import '../widgets/share_dialog.dart';
 
 class DocumentViewer extends StatefulWidget {
   final DocumentLeafNode? document;
@@ -84,14 +86,103 @@ class _DocumentViewerState extends State<DocumentViewer> {
       title: Text(widget.document?.name ?? ''),
       centerTitle: true,
       actions: [
-        IconButton(
-          icon: Icon(_isEditing ? Icons.save : Icons.edit),
-          onPressed: () {
-            setState(() {
-              _isEditing = !_isEditing;
-            });
-          },
-          tooltip: _isEditing ? 'Save' : 'Edit',
+        Row(
+          children: [
+            if (widget.document != null) ...[
+              IconButton(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Export Document'),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Choose export format:'),
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final format in ExportFormat.values)
+                                FilledButton.tonal(
+                                  onPressed: () async {
+                                    try {
+                                      await DocumentExportService.exportDocument(
+                                        widget.document!.document,
+                                        format,
+                                      );
+                                      if (context.mounted) {
+                                        Navigator.of(context).pop();
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Document exported successfully',
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Failed to export document: $e',
+                                            ),
+                                            backgroundColor:
+                                                Theme.of(context).colorScheme.error,
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  child: Text(
+                                    format.name.toUpperCase(),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.download),
+                tooltip: 'Export Document',
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.share),
+                onPressed: () => showDialog(
+                  context: context,
+                  builder: (context) => ShareDialog(
+                    documentId: widget.document!.id,
+                    projectId: widget.document!.projectId,
+                    createdBy: widget.document!.createdBy,
+                  ),
+                ),
+                tooltip: 'Share Document',
+              ),
+              const SizedBox(width: 8),
+            ],
+            IconButton(
+              icon: Icon(_isEditing ? Icons.save : Icons.edit),
+              onPressed: () {
+                setState(() {
+                  _isEditing = !_isEditing;
+                });
+              },
+              tooltip: _isEditing ? 'Save' : 'Edit',
+            ),
+          ],
         ),
       ],
     );

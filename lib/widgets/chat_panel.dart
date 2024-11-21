@@ -63,30 +63,39 @@ class _ChatHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: colorScheme.surface,
         border: Border(
           bottom: BorderSide(
-            color: Theme.of(context).dividerColor,
+            color: colorScheme.outlineVariant,
           ),
         ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.chat_outlined),
+          Icon(
+            Icons.chat_outlined,
+            color: colorScheme.primary,
+          ),
           const SizedBox(width: 8),
-          const Text(
+          Text(
             'AI Assistant',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
+              color: colorScheme.onSurface,
             ),
           ),
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.delete_outline),
+            icon: Icon(
+              Icons.delete_outline,
+              color: colorScheme.error,
+            ),
             onPressed: onClear,
             tooltip: 'Clear chat',
           ),
@@ -162,6 +171,8 @@ class _ProcessingIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
     return Container(
       padding: const EdgeInsets.all(16.0),
       margin: const EdgeInsets.only(
@@ -171,7 +182,7 @@ class _ProcessingIndicator extends StatelessWidget {
         bottom: 4.0,
       ),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+        color: colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(12.0),
       ),
       child: Row(
@@ -182,11 +193,16 @@ class _ProcessingIndicator extends StatelessWidget {
             height: 16,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: Theme.of(context).colorScheme.primary,
+              color: colorScheme.primary,
             ),
           ),
           const SizedBox(width: 8),
-          const Text('Thinking...'),
+          Text(
+            'Thinking...',
+            style: TextStyle(
+              color: colorScheme.onPrimaryContainer,
+            ),
+          ),
         ],
       ),
     );
@@ -217,16 +233,30 @@ class _MessageBubble extends StatelessWidget {
           bottom: 4.0,
         ),
         decoration: BoxDecoration(
-          color: isUser
-              ? colorScheme.primary
-              : colorScheme.primaryContainer.withOpacity(0.5),
+          color: isUser ? colorScheme.primary : colorScheme.primaryContainer,
           borderRadius: BorderRadius.circular(12.0),
         ),
-        child: Text(
-          message.content,
-          style: TextStyle(
-            color: isUser ? colorScheme.onPrimary : colorScheme.onSurface,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              message.content,
+              style: TextStyle(
+                color: isUser ? colorScheme.onPrimary : colorScheme.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}',
+              style: TextStyle(
+                fontSize: 12,
+                color: isUser 
+                    ? colorScheme.onPrimary.withOpacity(0.7)
+                    : colorScheme.onPrimaryContainer.withOpacity(0.7),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -271,13 +301,15 @@ class _MessageInputState extends State<_MessageInput> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: colorScheme.surface,
         border: Border(
           top: BorderSide(
-            color: Theme.of(context).dividerColor,
+            color: colorScheme.outlineVariant,
           ),
         ),
       ),
@@ -287,9 +319,29 @@ class _MessageInputState extends State<_MessageInput> {
             child: TextField(
               controller: _controller,
               enabled: !widget.isProcessing,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Ask me anything about this document...',
-                border: OutlineInputBorder(),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                  borderSide: BorderSide(
+                    color: colorScheme.outline,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                  borderSide: BorderSide(
+                    color: colorScheme.outline,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                  borderSide: BorderSide(
+                    color: colorScheme.primary,
+                    width: 2,
+                  ),
+                ),
+                fillColor: colorScheme.surface,
+                filled: true,
               ),
               maxLines: null,
               textInputAction: TextInputAction.send,
@@ -303,6 +355,12 @@ class _MessageInputState extends State<_MessageInput> {
           IconButton.filled(
             onPressed: _hasText && !widget.isProcessing ? _handleSubmit : null,
             icon: const Icon(Icons.send),
+            style: IconButton.styleFrom(
+              backgroundColor: colorScheme.primary,
+              foregroundColor: colorScheme.onPrimary,
+              disabledBackgroundColor: colorScheme.surfaceVariant,
+              disabledForegroundColor: colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),

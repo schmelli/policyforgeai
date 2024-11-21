@@ -37,7 +37,7 @@ class Project extends Equatable {
       createdAt: now,
       modifiedAt: now,
       createdBy: createdBy,
-      rootNodes: [],
+      rootNodes: const [],
       settings: ProjectSettings.defaults(),
     );
   }
@@ -72,7 +72,7 @@ class Project extends Equatable {
       createdAt: DateTime.parse(json['createdAt'] as String),
       modifiedAt: DateTime.parse(json['modifiedAt'] as String),
       createdBy: json['createdBy'] as String,
-      rootNodes: [],  // Note: rootNodes are loaded separately via loadProjectTree
+      rootNodes: const [],  // Note: rootNodes are loaded separately via loadProjectTree
       settings: ProjectSettings.fromJson(json['settings'] as Map<String, dynamic>),
     );
   }
@@ -190,7 +190,7 @@ class FolderNode extends DocumentNode {
       modifiedAt: now,
       createdBy: createdBy,
       parentId: parentId,
-      children: [],
+      children: const [],
     );
   }
 

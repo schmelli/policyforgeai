@@ -53,8 +53,8 @@ class PolicyDocument extends Equatable {
       tags: tags,
       status: DocumentStatus.draft,
       metadata: DocumentMetadata.initial(),
-      versions: [],
-      comments: [],
+      versions: const [],
+      comments: const [],
       permissions: DocumentPermissions.defaultPermissions(),
       version: 1,
     );

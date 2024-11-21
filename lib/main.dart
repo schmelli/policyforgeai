@@ -5,12 +5,9 @@ import 'blocs/document/document_bloc.dart';
 import 'blocs/settings/settings_bloc.dart';
 import 'blocs/chat/chat_bloc.dart';
 import 'models/project.dart';
-import 'models/settings.dart';
 import 'services/storage_service.dart';
 import 'services/ai_service.dart';
 import 'widgets/document_tree.dart';
-import 'widgets/document_viewer.dart';
-import 'widgets/create_node_dialog.dart';
 import 'widgets/project_selection_dialog.dart';
 import 'widgets/settings_panel.dart';
 import 'widgets/chat_panel.dart';
@@ -21,9 +18,12 @@ void main() async {
   final storageService = StorageService();
   await storageService.initialize();
 
+  final settings = await storageService.loadProjectSettings();
   final aiService = AIService(
-    apiKey: const String.fromEnvironment('OPENAI_API_KEY'),
-    model: 'gpt-3.5-turbo',
+    apiKey: settings?.aiSettings.apiKey ?? const String.fromEnvironment('OPENAI_API_KEY'),
+    model: settings?.aiSettings.model ?? 'gpt-3.5-turbo',
+    temperature: settings?.aiSettings.temperature ?? 0.7,
+    maxTokens: settings?.aiSettings.maxTokens ?? 1000,
   );
 
   runApp(
@@ -32,7 +32,7 @@ void main() async {
         RepositoryProvider.value(value: storageService),
         RepositoryProvider.value(value: aiService),
       ],
-      child: const MyApp(storageService: storageService),
+      child: MyApp(storageService: storageService),
     ),
   );
 }
@@ -50,9 +50,26 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'PolicyForge AI',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.light,
+        ).copyWith(
+          primaryContainer: Colors.blue.shade50,
+          onPrimaryContainer: Colors.blue.shade900,
+        ),
         useMaterial3: true,
       ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.dark,
+        ).copyWith(
+          primaryContainer: Colors.blue.shade900,
+          onPrimaryContainer: Colors.blue.shade50,
+        ),
+        useMaterial3: true,
+      ),
+      themeMode: ThemeMode.system,
       home: ProjectSelectionScreen(storageService: storageService),
     );
   }
@@ -226,16 +243,10 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
                             margin: const EdgeInsets.all(8.0),
                             child: DocumentTree(
                               onCreateFolder: (String name, String? parentId) {
-                                _documentTreeBloc.add(CreateFolder(
-                                  name: name,
-                                  parentId: parentId,
-                                ));
+                                _documentTreeBloc.add(CreateFolder(name, parentId: parentId));
                               },
                               onCreateDocument: (String name, String? parentId) {
-                                _documentTreeBloc.add(CreateDocument(
-                                  name: name,
-                                  parentId: parentId,
-                                ));
+                                _documentTreeBloc.add(CreateDocument(name, parentId: parentId));
                               },
                             ),
                           ),
@@ -270,15 +281,24 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
                         // Chat Panel
                         SizedBox(
                           width: 300,
-                          child: BlocProvider(
-                            create: (context) => ChatBloc(
-                              aiService: context.read<AIService>(),
-                              storageService: context.read<StorageService>(),
-                              documentId: context.read<DocumentTreeBloc>().state.currentDocumentId ?? '',
-                            ),
-                            child: ChatPanel(
-                              documentId: context.read<DocumentTreeBloc>().state.currentDocumentId ?? '',
-                            ),
+                          child: BlocBuilder<DocumentTreeBloc, DocumentTreeState>(
+                            builder: (context, state) {
+                              final documentId = state is DocumentTreeLoaded && 
+                                state.selectedNode is DocumentLeafNode
+                                  ? (state.selectedNode as DocumentLeafNode).document.id
+                                  : '';
+                              
+                              return BlocProvider(
+                                create: (context) => ChatBloc(
+                                  aiService: context.read<AIService>(),
+                                  storageService: context.read<StorageService>(),
+                                  documentId: documentId,
+                                ),
+                                child: ChatPanel(
+                                  documentId: documentId,
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -304,7 +324,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
 }
 
 class DocumentViewer extends StatelessWidget {
-  final Document? document;
+  final PolicyDocument? document;
   final void Function(String)? onSave;
 
   const DocumentViewer({super.key, this.document, this.onSave});
