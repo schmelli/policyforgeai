@@ -9,11 +9,38 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_bloc: ^8.1.3
+  equatable: ^2.0.5
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  file_picker: ^5.2.5
+  get_it: ^7.6.4
+  injectable: ^2.3.0
+  
+  # Document Editing
+  flutter_quill: ^7.4.6
+  diff_match_patch: ^0.4.1
+  
+  # AI and NLP
+  dart_openai: ^4.0.0
+  
+  # Collaboration
+  web_socket_channel: ^2.4.0
+  shared_preferences: ^2.2.1
+  
+  # Utils
+  uuid: ^3.0.7
+  intl: ^0.18.1
+  logger: ^2.0.2
+  http: ^0.13.5
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^2.0.0
+  build_runner: ^2.4.6
+  injectable_generator: ^2.4.0
+  mockito: ^5.4.2
 
 flutter:
   uses-material-design: true

@@ -1,137 +1,409 @@
-// ignore_for_file: library_private_types_in_public_api
-
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'blocs/document_tree/document_tree_bloc.dart';
+import 'blocs/document/document_bloc.dart';
+import 'blocs/settings/settings_bloc.dart';
+import 'blocs/chat/chat_bloc.dart';
+import 'models/project.dart';
+import 'models/settings.dart';
+import 'services/storage_service.dart';
+import 'services/ai_service.dart';
+import 'widgets/document_tree.dart';
+import 'widgets/document_viewer.dart';
+import 'widgets/create_node_dialog.dart';
+import 'widgets/project_selection_dialog.dart';
+import 'widgets/settings_panel.dart';
+import 'widgets/chat_panel.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  final storageService = StorageService();
+  await storageService.initialize();
+
+  final aiService = AIService(
+    apiKey: const String.fromEnvironment('OPENAI_API_KEY'),
+    model: 'gpt-3.5-turbo',
+  );
+
+  runApp(
+    MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider.value(value: storageService),
+        RepositoryProvider.value(value: aiService),
+      ],
+      child: const MyApp(storageService: storageService),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final StorageService storageService;
+
+  const MyApp({
+    super.key,
+    required this.storageService,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      title: 'Policy Forge AI',
-      home: MyHomePage(),
+    return MaterialApp(
+      title: 'PolicyForge AI',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
+      home: ProjectSelectionScreen(storageService: storageService),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key});
+class ProjectSelectionScreen extends StatelessWidget {
+  final StorageService storageService;
 
-  @override
-  _MyHomePageState createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  String selectedFileContent = 'No file selected';
-  String selectedSectionContent = 'No section selected';
+  const ProjectSelectionScreen({
+    super.key,
+    required this.storageService,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Policy Forge AI'),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Welcome to PolicyForge AI',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 32),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      final project = Project.create(
+                        name: 'New Project',
+                        description: 'A new policy management project',
+                        createdBy: 'current-user', // TODO: Get from auth
+                      );
+                      await storageService.saveProject(project);
+                      if (context.mounted) {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (context) => ProjectWorkspace(
+                              storageService: storageService,
+                              projectId: project.id,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create New Project'),
+                  ),
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final projects = await storageService.listProjects();
+                      if (context.mounted) {
+                        final selectedProject = await showDialog<Project>(
+                          context: context,
+                          builder: (context) => ProjectSelectionDialog(
+                            projects: projects,
+                          ),
+                        );
+                        if (selectedProject != null && context.mounted) {
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(
+                              builder: (context) => ProjectWorkspace(
+                                storageService: storageService,
+                                projectId: selectedProject.id,
+                              ),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.folder_open),
+                    label: const Text('Open Existing Project'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth > 800) {
-            // Desktop Layout with three panes
-            return Row(
-              children: [
-                // File Explorer Pane (Left)
-                Expanded(
-                  flex: 1,
-                  child: Container(
-                    color: Colors.grey[200],
-                    child: ListView(
+    );
+  }
+}
+
+class ProjectWorkspace extends StatefulWidget {
+  final StorageService storageService;
+  final String projectId;
+
+  const ProjectWorkspace({
+    super.key,
+    required this.storageService,
+    required this.projectId,
+  });
+
+  @override
+  State<ProjectWorkspace> createState() => _ProjectWorkspaceState();
+}
+
+class _ProjectWorkspaceState extends State<ProjectWorkspace> {
+  int _selectedIndex = 0;
+  late final DocumentTreeBloc _documentTreeBloc;
+  late final DocumentBloc _documentBloc;
+  late final SettingsBloc _settingsBloc;
+
+  @override
+  void initState() {
+    super.initState();
+    _documentTreeBloc = DocumentTreeBloc(
+      storageService: widget.storageService,
+      projectId: widget.projectId,
+    );
+    _documentBloc = DocumentBloc(
+      storageService: widget.storageService,
+      projectId: widget.projectId,
+    );
+    _settingsBloc = SettingsBloc(
+      storageService: widget.storageService,
+      projectId: widget.projectId,
+    );
+    _documentTreeBloc.add(LoadDocumentTree(widget.projectId));
+    _settingsBloc.add(LoadSettings(widget.projectId));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Row(
+        children: [
+          // Navigation Rail
+          NavigationRail(
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: (int index) {
+              setState(() {
+                _selectedIndex = index;
+              });
+            },
+            labelType: NavigationRailLabelType.all,
+            destinations: const [
+              NavigationRailDestination(
+                icon: Icon(Icons.folder_outlined),
+                selectedIcon: Icon(Icons.folder),
+                label: Text('Documents'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.settings_outlined),
+                selectedIcon: Icon(Icons.settings),
+                label: Text('Settings'),
+              ),
+            ],
+          ),
+          // Main Content
+          Expanded(
+            child: MultiBlocProvider(
+              providers: [
+                BlocProvider.value(value: _documentTreeBloc),
+                BlocProvider.value(value: _documentBloc),
+                BlocProvider.value(value: _settingsBloc),
+              ],
+              child: _selectedIndex == 0
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        ListTile(
-                          title: const Text('File 1'),
-                          onTap: () {
-                            setState(() {
-                              selectedFileContent = 'Content of File 1';
-                            });
-                          },
+                        // Document Tree Panel
+                        SizedBox(
+                          width: 250,
+                          child: Card(
+                            margin: const EdgeInsets.all(8.0),
+                            child: DocumentTree(
+                              onCreateFolder: (String name, String? parentId) {
+                                _documentTreeBloc.add(CreateFolder(
+                                  name: name,
+                                  parentId: parentId,
+                                ));
+                              },
+                              onCreateDocument: (String name, String? parentId) {
+                                _documentTreeBloc.add(CreateDocument(
+                                  name: name,
+                                  parentId: parentId,
+                                ));
+                              },
+                            ),
+                          ),
                         ),
-                        ListTile(
-                          title: const Text('File 2'),
-                          onTap: () {
-                            setState(() {
-                              selectedFileContent = 'Content of File 2';
-                            });
-                          },
+                        // Document Viewer Panel
+                        Expanded(
+                          child: Card(
+                            margin: const EdgeInsets.all(8.0),
+                            child: BlocBuilder<DocumentTreeBloc, DocumentTreeState>(
+                              builder: (context, state) {
+                                if (state is DocumentTreeLoaded &&
+                                    state.selectedNode != null) {
+                                  if (state.selectedNode is DocumentLeafNode) {
+                                    return DocumentViewer(
+                                      document: (state.selectedNode
+                                              as DocumentLeafNode)
+                                          .document,
+                                      onSave: (String content) {
+                                        _documentBloc
+                                            .add(UpdateDocument(content: content));
+                                      },
+                                    );
+                                  }
+                                }
+                                return const Center(
+                                  child: Text('Select a document to view'),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        // Chat Panel
+                        SizedBox(
+                          width: 300,
+                          child: BlocProvider(
+                            create: (context) => ChatBloc(
+                              aiService: context.read<AIService>(),
+                              storageService: context.read<StorageService>(),
+                              documentId: context.read<DocumentTreeBloc>().state.currentDocumentId ?? '',
+                            ),
+                            child: ChatPanel(
+                              documentId: context.read<DocumentTreeBloc>().state.currentDocumentId ?? '',
+                            ),
+                          ),
                         ),
                       ],
+                    )
+                  : const Card(
+                      margin: EdgeInsets.all(8.0),
+                      child: SettingsPanel(),
                     ),
-                  ),
-                ),
-                // Document Navigation Pane (Middle)
-                Expanded(
-                  flex: 1,
-                  child: Container(
-                    color: Colors.grey[300],
-                    child: ListView(
-                      children: [
-                        ListTile(
-                          title: const Text('Section 1'),
-                          onTap: () {
-                            setState(() {
-                              selectedSectionContent = 'Content of Section 1';
-                            });
-                          },
-                        ),
-                        ListTile(
-                          title: const Text('Section 2'),
-                          onTap: () {
-                            setState(() {
-                              selectedSectionContent = 'Content of Section 2';
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Main Document Pane (Right)
-                Expanded(
-                  flex: 2,
-                  child: Container(
-                    color: Colors.white,
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Text(
-                        'File Content:\n$selectedFileContent\n\nSection Content:\n$selectedSectionContent',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          } else {
-            // Mobile Layout with single pane
-            return Column(
-              children: [
-                Expanded(
-                  child: Container(
-                    color: Colors.white,
-                    child: const Center(
-                      child: Text(
-                        'Please use a larger screen to view the three-pane layout.',
-                        style: TextStyle(fontSize: 18),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          }
-        },
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _documentTreeBloc.close();
+    _documentBloc.close();
+    _settingsBloc.close();
+    super.dispose();
+  }
+}
+
+class DocumentViewer extends StatelessWidget {
+  final Document? document;
+  final void Function(String)? onSave;
+
+  const DocumentViewer({super.key, this.document, this.onSave});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        AppBar(
+          title: Text(document?.name ?? 'Untitled Document'),
+          centerTitle: true,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.save),
+              onPressed: onSave != null
+                  ? () => _handleSaveDocument(context)
+                  : null,
+            ),
+          ],
+        ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              controller: document != null
+                  ? TextEditingController(text: document.content)
+                  : null,
+              maxLines: null,
+              expands: true,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+              ),
+              onChanged: onSave,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _handleSaveDocument(BuildContext context) {
+    final state = context.read<DocumentBloc>().state;
+    if (state is DocumentLoaded) {
+      context.read<DocumentBloc>().add(SaveDocument());
+    }
+  }
+}
+
+class AIChatPanel extends StatelessWidget {
+  const AIChatPanel({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        AppBar(
+          title: const Text('AI Assistant'),
+          centerTitle: true,
+        ),
+        Expanded(
+          child: Column(
+            children: [
+              const Expanded(
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Center(
+                    child: Text('Chat messages will appear here'),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        decoration: const InputDecoration(
+                          hintText: 'Ask me anything...',
+                          border: OutlineInputBorder(),
+                        ),
+                        onSubmitted: (value) {
+                          // TODO: Implement chat
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.send),
+                      onPressed: () {
+                        // TODO: Implement send message
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
