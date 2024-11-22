@@ -5,6 +5,8 @@ import 'blocs/document/document_bloc.dart';
 import 'blocs/settings/settings_bloc.dart';
 import 'blocs/chat/chat_bloc.dart';
 import 'models/project.dart';
+import 'models/document.dart';
+import 'models/settings.dart';
 import 'services/storage_service.dart';
 import 'services/ai_service.dart';
 import 'widgets/document_tree.dart';
@@ -20,10 +22,10 @@ void main() async {
 
   final settings = await storageService.loadProjectSettings();
   final aiService = AIService(
-    apiKey: settings?.aiSettings.apiKey ?? const String.fromEnvironment('OPENAI_API_KEY'),
-    model: settings?.aiSettings.model ?? 'gpt-3.5-turbo',
-    temperature: settings?.aiSettings.temperature ?? 0.7,
-    maxTokens: settings?.aiSettings.maxTokens ?? 1000,
+    apiKey: settings?.aiSettings?.apiKey ?? const String.fromEnvironment('OPENAI_API_KEY'),
+    model: settings?.aiSettings?.model ?? 'gpt-3.5-turbo',
+    temperature: settings?.aiSettings?.temperature ?? 0.7,
+    maxTokens: settings?.aiSettings?.maxTokens ?? 1000,
   );
 
   runApp(
@@ -349,13 +351,11 @@ class DocumentViewer extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
-              controller: document != null
-                  ? TextEditingController(text: document.content)
-                  : null,
+              controller: TextEditingController(text: document?.content ?? ''),
               maxLines: null,
-              expands: true,
               decoration: const InputDecoration(
-                border: OutlineInputBorder(),
+                border: InputBorder.none,
+                hintText: 'Start typing...',
               ),
               onChanged: onSave,
             ),
@@ -366,9 +366,8 @@ class DocumentViewer extends StatelessWidget {
   }
 
   void _handleSaveDocument(BuildContext context) {
-    final state = context.read<DocumentBloc>().state;
-    if (state is DocumentLoaded) {
-      context.read<DocumentBloc>().add(SaveDocument());
+    if (onSave != null && document != null) {
+      onSave!(document!.content);
     }
   }
 }

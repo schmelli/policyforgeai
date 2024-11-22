@@ -3,7 +3,7 @@ import 'package:equatable/equatable.dart';
 import '../../models/project.dart';
 import '../../services/storage_service.dart';
 
-// Events
+/// Events for the document bloc
 abstract class DocumentEvent extends Equatable {
   const DocumentEvent();
 
@@ -11,6 +11,7 @@ abstract class DocumentEvent extends Equatable {
   List<Object?> get props => [];
 }
 
+/// Event to load a document
 class LoadDocument extends DocumentEvent {
   final DocumentLeafNode document;
 
@@ -20,6 +21,7 @@ class LoadDocument extends DocumentEvent {
   List<Object?> get props => [document];
 }
 
+/// Event to update document content
 class UpdateDocument extends DocumentEvent {
   final String content;
 
@@ -29,9 +31,12 @@ class UpdateDocument extends DocumentEvent {
   List<Object?> get props => [content];
 }
 
-class SaveDocument extends DocumentEvent {}
+/// Event to save document changes
+class SaveDocument extends DocumentEvent {
+  const SaveDocument();
+}
 
-// States
+/// States for the document bloc
 abstract class DocumentState extends Equatable {
   const DocumentState();
 
@@ -39,10 +44,13 @@ abstract class DocumentState extends Equatable {
   List<Object?> get props => [];
 }
 
+/// Initial state
 class DocumentInitial extends DocumentState {}
 
+/// Loading state
 class DocumentLoading extends DocumentState {}
 
+/// Loaded state with document
 class DocumentLoaded extends DocumentState {
   final DocumentLeafNode document;
   final bool isDirty;
@@ -52,9 +60,7 @@ class DocumentLoaded extends DocumentState {
     this.isDirty = false,
   });
 
-  @override
-  List<Object?> get props => [document, isDirty];
-
+  /// Creates a copy with the given fields replaced
   DocumentLoaded copyWith({
     DocumentLeafNode? document,
     bool? isDirty,
@@ -64,8 +70,12 @@ class DocumentLoaded extends DocumentState {
       isDirty: isDirty ?? this.isDirty,
     );
   }
+
+  @override
+  List<Object?> get props => [document, isDirty];
 }
 
+/// Error state
 class DocumentError extends DocumentState {
   final String message;
 
@@ -75,7 +85,7 @@ class DocumentError extends DocumentState {
   List<Object?> get props => [message];
 }
 
-// Bloc
+/// BLoC for managing document state
 class DocumentBloc extends Bloc<DocumentEvent, DocumentState> {
   final StorageService _storageService;
   final String projectId;
@@ -90,7 +100,8 @@ class DocumentBloc extends Bloc<DocumentEvent, DocumentState> {
     on<SaveDocument>(_onSaveDocument);
   }
 
-  void _onLoadDocument(
+  /// Handles the LoadDocument event
+  Future<void> _onLoadDocument(
     LoadDocument event,
     Emitter<DocumentState> emit,
   ) async {
@@ -110,46 +121,52 @@ class DocumentBloc extends Bloc<DocumentEvent, DocumentState> {
     }
   }
 
+  /// Handles the UpdateDocument event
   void _onUpdateDocument(
     UpdateDocument event,
     Emitter<DocumentState> emit,
   ) {
-    if (state is! DocumentLoaded) return;
+    if (state is! DocumentLoaded) {
+      emit(const DocumentError('No document loaded'));
+      return;
+    }
 
-    final currentState = state as DocumentLoaded;
-    final updatedDocument = PolicyDocument(
-      id: currentState.document.document.id,
-      title: currentState.document.document.title,
-      content: event.content,
-      createdAt: currentState.document.document.createdAt,
-      modifiedAt: DateTime.now(),
-      createdBy: currentState.document.document.createdBy,
-      version: currentState.document.document.version,
-      metadata: currentState.document.document.metadata,
-      comments: currentState.document.document.comments,
-    );
+    try {
+      final currentState = state as DocumentLoaded;
+      final currentDoc = currentState.document.document;
+      if (currentDoc == null) {
+        emit(const DocumentError('Document data is missing'));
+        return;
+      }
 
-    final updatedNode = DocumentLeafNode(
-      id: currentState.document.id,
-      name: currentState.document.name,
-      createdAt: currentState.document.createdAt,
-      modifiedAt: DateTime.now(),
-      createdBy: currentState.document.createdBy,
-      parentId: currentState.document.parentId,
-      document: updatedDocument,
-    );
+      final updatedDocument = currentDoc.copyWith(
+        content: event.content,
+        modifiedAt: DateTime.now(),
+      );
 
-    emit(DocumentLoaded(
-      document: updatedNode,
-      isDirty: true,
-    ));
+      final updatedNode = currentState.document.copyWith(
+        modifiedAt: DateTime.now(),
+        document: updatedDocument,
+      );
+
+      emit(DocumentLoaded(
+        document: updatedNode,
+        isDirty: true,
+      ));
+    } catch (e) {
+      emit(DocumentError(e.toString()));
+    }
   }
 
-  void _onSaveDocument(
+  /// Handles the SaveDocument event
+  Future<void> _onSaveDocument(
     SaveDocument event,
     Emitter<DocumentState> emit,
   ) async {
-    if (state is! DocumentLoaded) return;
+    if (state is! DocumentLoaded) {
+      emit(const DocumentError('No document loaded'));
+      return;
+    }
 
     final currentState = state as DocumentLoaded;
     try {

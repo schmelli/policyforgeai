@@ -12,6 +12,15 @@ abstract class ChatEvent extends Equatable {
   List<Object?> get props => [];
 }
 
+class LoadChat extends ChatEvent {
+  final String documentId;
+
+  const LoadChat(this.documentId);
+
+  @override
+  List<Object?> get props => [documentId];
+}
+
 class SendMessage extends ChatEvent {
   final String message;
 
@@ -65,11 +74,15 @@ class ChatError extends ChatState {
   List<Object?> get props => [message];
 }
 
-// Bloc
+class ChatLoading extends ChatState {
+  const ChatLoading();
+}
+
 class ChatBloc extends Bloc<ChatEvent, ChatState> {
   final AIService _aiService;
   final StorageService _storageService;
   final String _documentId;
+  ChatThread? _currentThread;
 
   ChatBloc({
     required AIService aiService,
@@ -78,78 +91,71 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   })  : _aiService = aiService,
         _storageService = storageService,
         _documentId = documentId,
-        super(ChatLoaded(
-          thread: ChatThread.create(documentId: documentId),
-          isProcessing: false,
-        )) {
+        super(const ChatLoading()) {
+    on<LoadChat>(_onLoadChat);
     on<SendMessage>(_onSendMessage);
     on<ClearChat>(_onClearChat);
-    _loadChatThread();
+
+    // Load chat thread when bloc is created
+    add(LoadChat(_documentId));
   }
 
-  Future<void> _loadChatThread() async {
+  Future<void> _onLoadChat(LoadChat event, Emitter<ChatState> emit) async {
     try {
-      final thread = await _storageService.loadChatThread(_documentId) ??
-          ChatThread.create(documentId: _documentId);
-      emit(ChatLoaded(thread: thread, isProcessing: false));
+      emit(const ChatLoading());
+      final thread = await _storageService.loadChatThread(event.documentId);
+      _currentThread = thread ?? ChatThread(messages: []);
+      emit(ChatLoaded(thread: _currentThread!));
     } catch (e) {
-      emit(ChatError(message: 'Failed to load chat thread: $e'));
+      emit(ChatError('Failed to load chat thread: $e'));
     }
   }
 
   Future<void> _onSendMessage(SendMessage event, Emitter<ChatState> emit) async {
-    if (state is! ChatLoaded) return;
-
-    final currentState = state as ChatLoaded;
-    final userMessage = ChatMessage.create(
-      role: MessageRole.user,
-      content: event.message,
-    );
-
-    // Add user message and show processing state
-    final updatedThread = currentState.thread.copyWith(
-      messages: [...currentState.thread.messages, userMessage],
-      lastModified: DateTime.now(),
-    );
-    emit(ChatLoaded(thread: updatedThread, isProcessing: true));
-
     try {
-      // Get document content for context
-      final documentContent = await _storageService.getDocumentContent(_documentId);
+      if (_currentThread == null) {
+        _currentThread = ChatThread(messages: []);
+      }
 
-      // Generate AI response
-      final response = await _aiService.generateResponse(
-        messages: updatedThread.messages,
-        documentContext: documentContent,
+      final userMessage = ChatMessage(
+        role: MessageRole.user,
+        content: event.message,
+        timestamp: DateTime.now(),
       );
 
-      // Add AI response
-      final aiMessage = ChatMessage.create(
+      _currentThread!.messages.add(userMessage);
+      emit(ChatLoaded(thread: _currentThread!, isProcessing: true));
+
+      // Save the user message
+      await _storageService.saveChatThread(_documentId, _currentThread!);
+
+      // Get AI response
+      final response = await _aiService.generateResponse(event.message);
+      
+      final aiMessage = ChatMessage(
         role: MessageRole.assistant,
         content: response,
+        timestamp: DateTime.now(),
       );
 
-      final finalThread = updatedThread.copyWith(
-        messages: [...updatedThread.messages, aiMessage],
-        lastModified: DateTime.now(),
-      );
-
-      // Save thread and update state
-      await _storageService.saveChatThread(_documentId, finalThread);
-      emit(ChatLoaded(thread: finalThread, isProcessing: false));
+      _currentThread!.messages.add(aiMessage);
+      
+      // Save the AI response
+      await _storageService.saveChatThread(_documentId, _currentThread!);
+      
+      emit(ChatLoaded(thread: _currentThread!));
     } catch (e) {
-      emit(ChatError(message: 'Failed to generate response: $e'));
-      emit(ChatLoaded(thread: updatedThread, isProcessing: false));
+      emit(ChatError('Failed to send message: $e'));
     }
   }
 
   Future<void> _onClearChat(ClearChat event, Emitter<ChatState> emit) async {
     try {
-      final emptyThread = ChatThread.create(documentId: _documentId);
-      await _storageService.saveChatThread(_documentId, emptyThread);
-      emit(ChatLoaded(thread: emptyThread, isProcessing: false));
+      await _storageService.clearChatThread(_documentId);
+      _currentThread = ChatThread(messages: []);
+      emit(ChatLoaded(thread: _currentThread!));
     } catch (e) {
-      emit(ChatError(message: 'Failed to clear chat: $e'));
+      emit(ChatError('Failed to clear chat: $e'));
     }
   }
 }

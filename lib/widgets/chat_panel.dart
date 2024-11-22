@@ -4,12 +4,7 @@ import '../blocs/chat/chat_bloc.dart';
 import '../models/chat.dart';
 
 class ChatPanel extends StatelessWidget {
-  final String documentId;
-
-  const ChatPanel({
-    super.key,
-    required this.documentId,
-  });
+  const ChatPanel({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +24,7 @@ class ChatPanel extends StatelessWidget {
               // Chat Header
               _ChatHeader(
                 onClear: () {
-                  context.read<ChatBloc>().add(const ClearChat());
+                  context.read<ChatBloc>().add(ClearChat());
                 },
               ),
               // Message List
@@ -50,7 +45,7 @@ class ChatPanel extends StatelessWidget {
           );
         }
 
-        return const SizedBox();
+        return const Center(child: Text('Loading...'));
       },
     );
   }

@@ -3,7 +3,7 @@ import 'package:equatable/equatable.dart';
 import '../../models/settings.dart';
 import '../../services/storage_service.dart';
 
-// Events
+/// Events for the settings bloc
 abstract class SettingsEvent extends Equatable {
   const SettingsEvent();
 
@@ -11,6 +11,7 @@ abstract class SettingsEvent extends Equatable {
   List<Object?> get props => [];
 }
 
+/// Event to load settings for a project
 class LoadSettings extends SettingsEvent {
   final String projectId;
 
@@ -20,6 +21,7 @@ class LoadSettings extends SettingsEvent {
   List<Object?> get props => [projectId];
 }
 
+/// Event to update settings
 class UpdateSettings extends SettingsEvent {
   final ProjectSettings settings;
 
@@ -29,11 +31,12 @@ class UpdateSettings extends SettingsEvent {
   List<Object?> get props => [settings];
 }
 
+/// Event to save settings
 class SaveSettings extends SettingsEvent {
   const SaveSettings();
 }
 
-// States
+/// States for the settings bloc
 abstract class SettingsState extends Equatable {
   const SettingsState();
 
@@ -41,10 +44,13 @@ abstract class SettingsState extends Equatable {
   List<Object?> get props => [];
 }
 
+/// Initial state
 class SettingsInitial extends SettingsState {}
 
+/// Loading state
 class SettingsLoading extends SettingsState {}
 
+/// Loaded state with settings
 class SettingsLoaded extends SettingsState {
   final ProjectSettings settings;
   final bool isDirty;
@@ -54,6 +60,7 @@ class SettingsLoaded extends SettingsState {
     this.isDirty = false,
   });
 
+  /// Creates a copy with the given fields replaced
   SettingsLoaded copyWith({
     ProjectSettings? settings,
     bool? isDirty,
@@ -68,6 +75,7 @@ class SettingsLoaded extends SettingsState {
   List<Object?> get props => [settings, isDirty];
 }
 
+/// Error state
 class SettingsError extends SettingsState {
   final String message;
 
@@ -77,7 +85,7 @@ class SettingsError extends SettingsState {
   List<Object?> get props => [message];
 }
 
-// Bloc
+/// BLoC for managing project settings
 class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   final StorageService _storageService;
   final String projectId;
@@ -92,7 +100,8 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     on<SaveSettings>(_onSaveSettings);
   }
 
-  void _onLoadSettings(
+  /// Handles the LoadSettings event
+  Future<void> _onLoadSettings(
     LoadSettings event,
     Emitter<SettingsState> emit,
   ) async {
@@ -109,6 +118,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     }
   }
 
+  /// Handles the UpdateSettings event
   void _onUpdateSettings(
     UpdateSettings event,
     Emitter<SettingsState> emit,
@@ -121,7 +131,8 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     ));
   }
 
-  void _onSaveSettings(
+  /// Handles the SaveSettings event
+  Future<void> _onSaveSettings(
     SaveSettings event,
     Emitter<SettingsState> emit,
   ) async {

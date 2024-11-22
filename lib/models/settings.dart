@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+/// Represents project-wide settings for a PolicyForge project
 class ProjectSettings extends Equatable {
   final String projectName;
   final String organizationName;
@@ -23,6 +24,16 @@ class ProjectSettings extends Equatable {
     this.aiSettings = const AISettings(),
   });
 
+  /// Creates a default project settings instance
+  factory ProjectSettings.defaults() {
+    return const ProjectSettings(
+      projectName: 'New Project',
+      organizationName: 'Default Organization',
+      organizationId: 'default-org',
+    );
+  }
+
+  /// Creates a copy of this project settings with the given fields replaced
   ProjectSettings copyWith({
     String? projectName,
     String? organizationName,
@@ -47,34 +58,35 @@ class ProjectSettings extends Equatable {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'projectName': projectName,
-        'organizationName': organizationName,
-        'organizationId': organizationId,
-        'aiEnabled': aiEnabled,
-        'collaborationEnabled': collaborationEnabled,
-        'versionControlEnabled': versionControlEnabled,
-        'allowedFileTypes': allowedFileTypes,
-        'customMetadata': customMetadata,
-        'aiSettings': aiSettings.toJson(),
-      };
+  /// Converts this project settings to a JSON map
+  Map<String, dynamic> toJson() {
+    return {
+      'projectName': projectName,
+      'organizationName': organizationName,
+      'organizationId': organizationId,
+      'aiEnabled': aiEnabled,
+      'collaborationEnabled': collaborationEnabled,
+      'versionControlEnabled': versionControlEnabled,
+      'allowedFileTypes': allowedFileTypes,
+      'customMetadata': customMetadata,
+      'aiSettings': aiSettings.toJson(),
+    };
+  }
 
+  /// Creates a project settings instance from a JSON map
   factory ProjectSettings.fromJson(Map<String, dynamic> json) {
     return ProjectSettings(
-      projectName: json['projectName'] as String,
-      organizationName: json['organizationName'] as String,
-      organizationId: json['organizationId'] as String,
+      projectName: json['projectName'] as String? ?? 'New Project',
+      organizationName: json['organizationName'] as String? ?? 'Default Organization',
+      organizationId: json['organizationId'] as String? ?? 'default-org',
       aiEnabled: json['aiEnabled'] as bool? ?? true,
       collaborationEnabled: json['collaborationEnabled'] as bool? ?? false,
       versionControlEnabled: json['versionControlEnabled'] as bool? ?? false,
-      allowedFileTypes: (json['allowedFileTypes'] as List<dynamic>?)
-              ?.map((e) => e as String)
-              .toList() ??
+      allowedFileTypes: (json['allowedFileTypes'] as List<dynamic>?)?.cast<String>() ?? 
           const ['md', 'txt', 'doc', 'docx', 'pdf'],
-      customMetadata:
-          (json['customMetadata'] as Map<String, dynamic>?) ?? const {},
-      aiSettings: json['aiSettings'] != null
-          ? AISettings.fromJson(json['aiSettings'] as Map<String, dynamic>)
+      customMetadata: json['customMetadata'] as Map<String, dynamic>? ?? const {},
+      aiSettings: json['aiSettings'] != null 
+          ? AISettings.fromJson(json['aiSettings'] as Map<String, dynamic>) 
           : const AISettings(),
     );
   }
@@ -93,6 +105,7 @@ class ProjectSettings extends Equatable {
       ];
 }
 
+/// Represents AI-specific settings for a PolicyForge project
 class AISettings extends Equatable {
   final String? apiKey;
   final String model;
@@ -108,6 +121,7 @@ class AISettings extends Equatable {
     this.streamResponses = true,
   });
 
+  /// Creates a copy of this AI settings with the given fields replaced
   AISettings copyWith({
     String? apiKey,
     String? model,
@@ -124,14 +138,18 @@ class AISettings extends Equatable {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'apiKey': apiKey,
-        'model': model,
-        'temperature': temperature,
-        'maxTokens': maxTokens,
-        'streamResponses': streamResponses,
-      };
+  /// Converts this AI settings to a JSON map
+  Map<String, dynamic> toJson() {
+    return {
+      'apiKey': apiKey,
+      'model': model,
+      'temperature': temperature,
+      'maxTokens': maxTokens,
+      'streamResponses': streamResponses,
+    };
+  }
 
+  /// Creates an AI settings instance from a JSON map
   factory AISettings.fromJson(Map<String, dynamic> json) {
     return AISettings(
       apiKey: json['apiKey'] as String?,

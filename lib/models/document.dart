@@ -52,36 +52,20 @@ class PolicyDocument extends Equatable {
       lastModifiedBy: createdBy,
       tags: tags,
       status: DocumentStatus.draft,
-      metadata: DocumentMetadata.initial(),
-      versions: const [],
-      comments: const [],
-      permissions: DocumentPermissions.defaultPermissions(),
-      version: 1,
+      metadata: DocumentMetadata.empty(),
+      versions: [],
+      comments: [],
+      permissions: DocumentPermissions.defaults(createdBy),
     );
   }
 
-  @override
-  List<Object?> get props => [
-        id,
-        title,
-        content,
-        createdAt,
-        modifiedAt,
-        createdBy,
-        lastModifiedBy,
-        tags,
-        status,
-        metadata,
-        versions,
-        comments,
-        permissions,
-        version,
-      ];
-
   PolicyDocument copyWith({
+    String? id,
     String? title,
     String? content,
+    DateTime? createdAt,
     DateTime? modifiedAt,
+    String? createdBy,
     String? lastModifiedBy,
     List<String>? tags,
     DocumentStatus? status,
@@ -92,12 +76,12 @@ class PolicyDocument extends Equatable {
     int? version,
   }) {
     return PolicyDocument(
-      id: id,
+      id: id ?? this.id,
       title: title ?? this.title,
       content: content ?? this.content,
-      createdAt: createdAt,
+      createdAt: createdAt ?? this.createdAt,
       modifiedAt: modifiedAt ?? this.modifiedAt,
-      createdBy: createdBy,
+      createdBy: createdBy ?? this.createdBy,
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
       tags: tags ?? this.tags,
       status: status ?? this.status,
@@ -135,21 +119,46 @@ class PolicyDocument extends Equatable {
       modifiedAt: DateTime.parse(json['modifiedAt'] as String),
       createdBy: json['createdBy'] as String,
       lastModifiedBy: json['lastModifiedBy'] as String,
-      tags: List<String>.from(json['tags'] as List),
+      tags: (json['tags'] as List<dynamic>).cast<String>(),
       status: DocumentStatus.values.firstWhere(
         (e) => e.toString().split('.').last == json['status'],
+        orElse: () => DocumentStatus.draft,
       ),
-      metadata: DocumentMetadata.fromJson(json['metadata'] as Map<String, dynamic>),
-      versions: (json['versions'] as List<dynamic>)
-          .map((v) => DocumentVersion.fromJson(v as Map<String, dynamic>))
-          .toList(),
-      comments: (json['comments'] as List<dynamic>)
-          .map((c) => DocumentComment.fromJson(c as Map<String, dynamic>))
-          .toList(),
-      permissions: DocumentPermissions.fromJson(json['permissions'] as Map<String, dynamic>),
+      metadata: json['metadata'] != null
+          ? DocumentMetadata.fromJson(json['metadata'] as Map<String, dynamic>)
+          : DocumentMetadata.empty(),
+      versions: (json['versions'] as List<dynamic>?)
+              ?.map((e) => DocumentVersion.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      comments: (json['comments'] as List<dynamic>?)
+              ?.map((e) => DocumentComment.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      permissions: json['permissions'] != null
+          ? DocumentPermissions.fromJson(json['permissions'] as Map<String, dynamic>)
+          : DocumentPermissions.defaults(json['createdBy'] as String),
       version: json['version'] as int? ?? 1,
     );
   }
+
+  @override
+  List<Object?> get props => [
+        id,
+        title,
+        content,
+        createdAt,
+        modifiedAt,
+        createdBy,
+        lastModifiedBy,
+        tags,
+        status,
+        metadata,
+        versions,
+        comments,
+        permissions,
+        version,
+      ];
 }
 
 /// Status of a policy document
@@ -159,67 +168,63 @@ enum DocumentStatus {
   approved,
   published,
   archived,
-  deprecated
+  deleted
 }
 
 /// Metadata associated with a policy document
 class DocumentMetadata extends Equatable {
-  final String projectId;
-  final int wordCount;
-  final int characterCount;
-  final double readabilityScore;
-  final Map<String, dynamic> aiAnalysis;
-  final Map<String, String> customFields;
+  final String description;
+  final String category;
+  final String department;
+  final Map<String, dynamic> customFields;
 
   const DocumentMetadata({
-    required this.projectId,
-    required this.wordCount,
-    required this.characterCount,
-    required this.readabilityScore,
-    required this.aiAnalysis,
-    required this.customFields,
+    required this.description,
+    required this.category,
+    required this.department,
+    this.customFields = const {},
   });
 
-  factory DocumentMetadata.initial() {
+  factory DocumentMetadata.empty() {
     return const DocumentMetadata(
-      projectId: '',
-      wordCount: 0,
-      characterCount: 0,
-      readabilityScore: 0,
-      aiAnalysis: {},
-      customFields: {},
+      description: '',
+      category: '',
+      department: '',
     );
   }
 
-  @override
-  List<Object?> get props => [
-        projectId,
-        wordCount,
-        characterCount,
-        readabilityScore,
-        aiAnalysis,
-        customFields,
-      ];
+  DocumentMetadata copyWith({
+    String? description,
+    String? category,
+    String? department,
+    Map<String, dynamic>? customFields,
+  }) {
+    return DocumentMetadata(
+      description: description ?? this.description,
+      category: category ?? this.category,
+      department: department ?? this.department,
+      customFields: customFields ?? this.customFields,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
-        'projectId': projectId,
-        'wordCount': wordCount,
-        'characterCount': characterCount,
-        'readabilityScore': readabilityScore,
-        'aiAnalysis': aiAnalysis,
+        'description': description,
+        'category': category,
+        'department': department,
         'customFields': customFields,
       };
 
   factory DocumentMetadata.fromJson(Map<String, dynamic> json) {
     return DocumentMetadata(
-      projectId: json['projectId'] as String,
-      wordCount: json['wordCount'] as int,
-      characterCount: json['characterCount'] as int,
-      readabilityScore: (json['readabilityScore'] as num).toDouble(),
-      aiAnalysis: Map<String, dynamic>.from(json['aiAnalysis'] as Map),
-      customFields: Map<String, String>.from(json['customFields'] as Map),
+      description: json['description'] as String? ?? '',
+      category: json['category'] as String? ?? '',
+      department: json['department'] as String? ?? '',
+      customFields: json['customFields'] as Map<String, dynamic>? ?? const {},
     );
   }
+
+  @override
+  List<Object?> get props => [description, category, department, customFields];
 }
 
 /// Represents a version of a document
@@ -228,39 +233,43 @@ class DocumentVersion extends Equatable {
   final String content;
   final DateTime createdAt;
   final String createdBy;
-  final String message;
-  final String branch;
-  final String? parentVersionId;
+  final String comment;
+  final int versionNumber;
 
   const DocumentVersion({
     required this.id,
     required this.content,
     required this.createdAt,
     required this.createdBy,
-    required this.message,
-    required this.branch,
-    this.parentVersionId,
+    required this.comment,
+    required this.versionNumber,
   });
 
-  @override
-  List<Object?> get props => [
-        id,
-        content,
-        createdAt,
-        createdBy,
-        message,
-        branch,
-        parentVersionId,
-      ];
+  DocumentVersion copyWith({
+    String? id,
+    String? content,
+    DateTime? createdAt,
+    String? createdBy,
+    String? comment,
+    int? versionNumber,
+  }) {
+    return DocumentVersion(
+      id: id ?? this.id,
+      content: content ?? this.content,
+      createdAt: createdAt ?? this.createdAt,
+      createdBy: createdBy ?? this.createdBy,
+      comment: comment ?? this.comment,
+      versionNumber: versionNumber ?? this.versionNumber,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'content': content,
         'createdAt': createdAt.toIso8601String(),
         'createdBy': createdBy,
-        'message': message,
-        'branch': branch,
-        'parentVersionId': parentVersionId,
+        'comment': comment,
+        'versionNumber': versionNumber,
       };
 
   factory DocumentVersion.fromJson(Map<String, dynamic> json) {
@@ -269,11 +278,20 @@ class DocumentVersion extends Equatable {
       content: json['content'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
       createdBy: json['createdBy'] as String,
-      message: json['message'] as String,
-      branch: json['branch'] as String,
-      parentVersionId: json['parentVersionId'] as String?,
+      comment: json['comment'] as String? ?? '',
+      versionNumber: json['versionNumber'] as int,
     );
   }
+
+  @override
+  List<Object?> get props => [
+        id,
+        content,
+        createdAt,
+        createdBy,
+        comment,
+        versionNumber,
+      ];
 }
 
 /// Represents a comment on a document
@@ -282,39 +300,43 @@ class DocumentComment extends Equatable {
   final String content;
   final DateTime createdAt;
   final String createdBy;
-  final String? parentCommentId;
-  final bool resolved;
-  final DocumentSelection selection;
+  final DocumentSelection? selection;
+  final List<DocumentComment> replies;
 
   const DocumentComment({
     required this.id,
     required this.content,
     required this.createdAt,
     required this.createdBy,
-    this.parentCommentId,
-    this.resolved = false,
-    required this.selection,
+    this.selection,
+    this.replies = const [],
   });
 
-  @override
-  List<Object?> get props => [
-        id,
-        content,
-        createdAt,
-        createdBy,
-        parentCommentId,
-        resolved,
-        selection,
-      ];
+  DocumentComment copyWith({
+    String? id,
+    String? content,
+    DateTime? createdAt,
+    String? createdBy,
+    DocumentSelection? selection,
+    List<DocumentComment>? replies,
+  }) {
+    return DocumentComment(
+      id: id ?? this.id,
+      content: content ?? this.content,
+      createdAt: createdAt ?? this.createdAt,
+      createdBy: createdBy ?? this.createdBy,
+      selection: selection ?? this.selection,
+      replies: replies ?? this.replies,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'content': content,
         'createdAt': createdAt.toIso8601String(),
         'createdBy': createdBy,
-        'parentCommentId': parentCommentId,
-        'resolved': resolved,
-        'selection': selection.toJson(),
+        'selection': selection?.toJson(),
+        'replies': replies.map((r) => r.toJson()).toList(),
       };
 
   factory DocumentComment.fromJson(Map<String, dynamic> json) {
@@ -323,113 +345,127 @@ class DocumentComment extends Equatable {
       content: json['content'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
       createdBy: json['createdBy'] as String,
-      parentCommentId: json['parentCommentId'] as String?,
-      resolved: json['resolved'] as bool? ?? false,
-      selection: DocumentSelection.fromJson(json['selection'] as Map<String, dynamic>),
-    );
-  }
-}
-
-/// Represents text selection in a document
-class DocumentSelection extends Equatable {
-  final int start;
-  final int end;
-
-  const DocumentSelection({
-    required this.start,
-    required this.end,
-  });
-
-  @override
-  List<Object?> get props => [start, end];
-
-  Map<String, dynamic> toJson() => {
-        'start': start,
-        'end': end,
-      };
-
-  factory DocumentSelection.fromJson(Map<String, dynamic> json) {
-    return DocumentSelection(
-      start: json['start'] as int,
-      end: json['end'] as int,
-    );
-  }
-}
-
-/// Represents document permissions
-class DocumentPermissions extends Equatable {
-  final List<String> readers;
-  final List<String> writers;
-  final List<String> reviewers;
-  final List<String> owners;
-  final bool isPublic;
-  final DateTime? expiresAt;
-  final String? password;
-  final bool enableComments;
-  final bool trackViews;
-
-  const DocumentPermissions({
-    required this.readers,
-    required this.writers,
-    required this.reviewers,
-    required this.owners,
-    required this.isPublic,
-    this.expiresAt,
-    this.password,
-    required this.enableComments,
-    required this.trackViews,
-  });
-
-  factory DocumentPermissions.defaultPermissions() {
-    return const DocumentPermissions(
-      readers: [],
-      writers: [],
-      reviewers: [],
-      owners: [],
-      isPublic: false,
-      enableComments: true,
-      trackViews: true,
+      selection: json['selection'] != null
+          ? DocumentSelection.fromJson(json['selection'] as Map<String, dynamic>)
+          : null,
+      replies: (json['replies'] as List<dynamic>?)
+              ?.map((e) => DocumentComment.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 
   @override
   List<Object?> get props => [
-        readers,
-        writers,
-        reviewers,
-        owners,
-        isPublic,
-        expiresAt,
-        password,
-        enableComments,
-        trackViews,
+        id,
+        content,
+        createdAt,
+        createdBy,
+        selection,
+        replies,
       ];
+}
+
+/// Represents text selection in a document
+class DocumentSelection extends Equatable {
+  final int startOffset;
+  final int endOffset;
+  final String selectedText;
+
+  const DocumentSelection({
+    required this.startOffset,
+    required this.endOffset,
+    required this.selectedText,
+  });
 
   Map<String, dynamic> toJson() => {
-        'readers': readers,
-        'writers': writers,
-        'reviewers': reviewers,
-        'owners': owners,
+        'startOffset': startOffset,
+        'endOffset': endOffset,
+        'selectedText': selectedText,
+      };
+
+  factory DocumentSelection.fromJson(Map<String, dynamic> json) {
+    return DocumentSelection(
+      startOffset: json['startOffset'] as int,
+      endOffset: json['endOffset'] as int,
+      selectedText: json['selectedText'] as String,
+    );
+  }
+
+  @override
+  List<Object?> get props => [startOffset, endOffset, selectedText];
+}
+
+/// Represents document permissions
+class DocumentPermissions extends Equatable {
+  final String owner;
+  final List<String> editors;
+  final List<String> viewers;
+  final List<String> commenters;
+  final bool isPublic;
+  final Map<String, List<String>> customRoles;
+
+  const DocumentPermissions({
+    required this.owner,
+    this.editors = const [],
+    this.viewers = const [],
+    this.commenters = const [],
+    this.isPublic = false,
+    this.customRoles = const {},
+  });
+
+  factory DocumentPermissions.defaults(String owner) {
+    return DocumentPermissions(owner: owner);
+  }
+
+  DocumentPermissions copyWith({
+    String? owner,
+    List<String>? editors,
+    List<String>? viewers,
+    List<String>? commenters,
+    bool? isPublic,
+    Map<String, List<String>>? customRoles,
+  }) {
+    return DocumentPermissions(
+      owner: owner ?? this.owner,
+      editors: editors ?? this.editors,
+      viewers: viewers ?? this.viewers,
+      commenters: commenters ?? this.commenters,
+      isPublic: isPublic ?? this.isPublic,
+      customRoles: customRoles ?? this.customRoles,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'owner': owner,
+        'editors': editors,
+        'viewers': viewers,
+        'commenters': commenters,
         'isPublic': isPublic,
-        'expiresAt': expiresAt?.toIso8601String(),
-        'password': password,
-        'enableComments': enableComments,
-        'trackViews': trackViews,
+        'customRoles': customRoles,
       };
 
   factory DocumentPermissions.fromJson(Map<String, dynamic> json) {
     return DocumentPermissions(
-      readers: List<String>.from(json['readers'] as List),
-      writers: List<String>.from(json['writers'] as List),
-      reviewers: List<String>.from(json['reviewers'] as List),
-      owners: List<String>.from(json['owners'] as List),
+      owner: json['owner'] as String,
+      editors: (json['editors'] as List<dynamic>?)?.cast<String>() ?? const [],
+      viewers: (json['viewers'] as List<dynamic>?)?.cast<String>() ?? const [],
+      commenters: (json['commenters'] as List<dynamic>?)?.cast<String>() ?? const [],
       isPublic: json['isPublic'] as bool? ?? false,
-      expiresAt: json['expiresAt'] != null
-          ? DateTime.parse(json['expiresAt'] as String)
-          : null,
-      password: json['password'] as String?,
-      enableComments: json['enableComments'] as bool? ?? true,
-      trackViews: json['trackViews'] as bool? ?? true,
+      customRoles: (json['customRoles'] as Map<String, dynamic>?)?.map(
+            (k, v) => MapEntry(k, (v as List<dynamic>).cast<String>()),
+          ) ??
+          const {},
     );
   }
+
+  @override
+  List<Object?> get props => [
+        owner,
+        editors,
+        viewers,
+        commenters,
+        isPublic,
+        customRoles,
+      ];
 }
