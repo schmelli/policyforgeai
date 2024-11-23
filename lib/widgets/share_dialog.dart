@@ -4,11 +4,15 @@ import '../services/share_service.dart';
 import '../models/document.dart';
 
 class ShareDialog extends StatefulWidget {
-  final PolicyDocument document;
+  final String documentId;
+  final String projectId;
+  final String createdBy;
 
   const ShareDialog({
     Key? key,
-    required this.document,
+    required this.documentId,
+    required this.projectId,
+    required this.createdBy,
   }) : super(key: key);
 
   @override
@@ -30,7 +34,7 @@ class _ShareDialogState extends State<ShareDialog> {
   Future<void> _loadExistingLinks() async {
     setState(() => _isLoading = true);
     try {
-      final links = await ShareService.getDocumentShareLinks(widget.document.id);
+      final links = await ShareService.getDocumentShareLinks(widget.documentId);
       setState(() => _existingLinks = links);
     } finally {
       setState(() => _isLoading = false);
@@ -39,10 +43,10 @@ class _ShareDialogState extends State<ShareDialog> {
 
   Future<void> _createShareLink() async {
     final link = await ShareService.createShareLink(
-      documentId: widget.document.id,
-      projectId: widget.document.metadata.projectId,
+      documentId: widget.documentId,
+      projectId: widget.projectId,
       permission: _permission,
-      createdBy: widget.document.createdBy,
+      createdBy: widget.createdBy,
       expiresAt: _expiresAt,
     );
 

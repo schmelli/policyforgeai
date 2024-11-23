@@ -133,6 +133,12 @@ class StorageService {
     await box.put(documentId, jsonEncode(thread.toJson()));
   }
 
+  /// Clear the chat thread for a document
+  Future<void> clearChatThread(String documentId) async {
+    final box = Hive.box<String>(_chatThreadsBox);
+    await box.delete(documentId);
+  }
+
   /// Load project settings from storage
   Future<ProjectSettings?> loadProjectSettings(String projectId) async {
     final box = Hive.box<String>(_settingsBox);

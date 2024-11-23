@@ -1,7 +1,11 @@
 import 'package:equatable/equatable.dart';
+import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 
+part 'document.g.dart';
+
 /// Represents a policy document in the system
+@JsonSerializable()
 class PolicyDocument extends Equatable {
   final String id;
   final String title;
@@ -17,6 +21,7 @@ class PolicyDocument extends Equatable {
   final List<DocumentComment> comments;
   final DocumentPermissions permissions;
   final int version;
+  final String projectId;
 
   const PolicyDocument({
     required this.id,
@@ -32,6 +37,7 @@ class PolicyDocument extends Equatable {
     required this.versions,
     required this.comments,
     required this.permissions,
+    required this.projectId,
     this.version = 1,
   });
 
@@ -39,6 +45,7 @@ class PolicyDocument extends Equatable {
   factory PolicyDocument.create({
     required String title,
     required String createdBy,
+    required String projectId,
     List<String> tags = const [],
   }) {
     final now = DateTime.now();
@@ -53,9 +60,10 @@ class PolicyDocument extends Equatable {
       tags: tags,
       status: DocumentStatus.draft,
       metadata: DocumentMetadata.empty(),
-      versions: [],
-      comments: [],
+      versions: const [],
+      comments: const [],
       permissions: DocumentPermissions.defaults(createdBy),
+      projectId: projectId,
     );
   }
 
@@ -73,6 +81,7 @@ class PolicyDocument extends Equatable {
     List<DocumentVersion>? versions,
     List<DocumentComment>? comments,
     DocumentPermissions? permissions,
+    String? projectId,
     int? version,
   }) {
     return PolicyDocument(
@@ -89,58 +98,17 @@ class PolicyDocument extends Equatable {
       versions: versions ?? this.versions,
       comments: comments ?? this.comments,
       permissions: permissions ?? this.permissions,
+      projectId: projectId ?? this.projectId,
       version: version ?? this.version,
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'content': content,
-        'createdAt': createdAt.toIso8601String(),
-        'modifiedAt': modifiedAt.toIso8601String(),
-        'createdBy': createdBy,
-        'lastModifiedBy': lastModifiedBy,
-        'tags': tags,
-        'status': status.toString().split('.').last,
-        'metadata': metadata.toJson(),
-        'versions': versions.map((v) => v.toJson()).toList(),
-        'comments': comments.map((c) => c.toJson()).toList(),
-        'permissions': permissions.toJson(),
-        'version': version,
-      };
+  /// Converts this document to a JSON map
+  Map<String, dynamic> toJson() => _$PolicyDocumentToJson(this);
 
-  factory PolicyDocument.fromJson(Map<String, dynamic> json) {
-    return PolicyDocument(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      content: json['content'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      modifiedAt: DateTime.parse(json['modifiedAt'] as String),
-      createdBy: json['createdBy'] as String,
-      lastModifiedBy: json['lastModifiedBy'] as String,
-      tags: (json['tags'] as List<dynamic>).cast<String>(),
-      status: DocumentStatus.values.firstWhere(
-        (e) => e.toString().split('.').last == json['status'],
-        orElse: () => DocumentStatus.draft,
-      ),
-      metadata: json['metadata'] != null
-          ? DocumentMetadata.fromJson(json['metadata'] as Map<String, dynamic>)
-          : DocumentMetadata.empty(),
-      versions: (json['versions'] as List<dynamic>?)
-              ?.map((e) => DocumentVersion.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
-      comments: (json['comments'] as List<dynamic>?)
-              ?.map((e) => DocumentComment.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
-      permissions: json['permissions'] != null
-          ? DocumentPermissions.fromJson(json['permissions'] as Map<String, dynamic>)
-          : DocumentPermissions.defaults(json['createdBy'] as String),
-      version: json['version'] as int? ?? 1,
-    );
-  }
+  /// Creates a document from a JSON map
+  factory PolicyDocument.fromJson(Map<String, dynamic> json) =>
+      _$PolicyDocumentFromJson(json);
 
   @override
   List<Object?> get props => [
@@ -157,6 +125,7 @@ class PolicyDocument extends Equatable {
         versions,
         comments,
         permissions,
+        projectId,
         version,
       ];
 }
@@ -168,10 +137,11 @@ enum DocumentStatus {
   approved,
   published,
   archived,
-  deleted
+  deprecated
 }
 
 /// Metadata associated with a policy document
+@JsonSerializable()
 class DocumentMetadata extends Equatable {
   final String description;
   final String category;
@@ -185,6 +155,7 @@ class DocumentMetadata extends Equatable {
     this.customFields = const {},
   });
 
+  /// Creates an empty metadata instance
   factory DocumentMetadata.empty() {
     return const DocumentMetadata(
       description: '',
@@ -207,27 +178,24 @@ class DocumentMetadata extends Equatable {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'description': description,
-        'category': category,
-        'department': department,
-        'customFields': customFields,
-      };
+  /// Converts this metadata to a JSON map
+  Map<String, dynamic> toJson() => _$DocumentMetadataToJson(this);
 
-  factory DocumentMetadata.fromJson(Map<String, dynamic> json) {
-    return DocumentMetadata(
-      description: json['description'] as String? ?? '',
-      category: json['category'] as String? ?? '',
-      department: json['department'] as String? ?? '',
-      customFields: json['customFields'] as Map<String, dynamic>? ?? const {},
-    );
-  }
+  /// Creates a metadata instance from a JSON map
+  factory DocumentMetadata.fromJson(Map<String, dynamic> json) =>
+      _$DocumentMetadataFromJson(json);
 
   @override
-  List<Object?> get props => [description, category, department, customFields];
+  List<Object?> get props => [
+        description,
+        category,
+        department,
+        customFields,
+      ];
 }
 
 /// Represents a version of a document
+@JsonSerializable()
 class DocumentVersion extends Equatable {
   final String id;
   final String content;
@@ -263,25 +231,12 @@ class DocumentVersion extends Equatable {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'content': content,
-        'createdAt': createdAt.toIso8601String(),
-        'createdBy': createdBy,
-        'comment': comment,
-        'versionNumber': versionNumber,
-      };
+  /// Converts this version to a JSON map
+  Map<String, dynamic> toJson() => _$DocumentVersionToJson(this);
 
-  factory DocumentVersion.fromJson(Map<String, dynamic> json) {
-    return DocumentVersion(
-      id: json['id'] as String,
-      content: json['content'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      createdBy: json['createdBy'] as String,
-      comment: json['comment'] as String? ?? '',
-      versionNumber: json['versionNumber'] as int,
-    );
-  }
+  /// Creates a version from a JSON map
+  factory DocumentVersion.fromJson(Map<String, dynamic> json) =>
+      _$DocumentVersionFromJson(json);
 
   @override
   List<Object?> get props => [
@@ -295,6 +250,7 @@ class DocumentVersion extends Equatable {
 }
 
 /// Represents a comment on a document
+@JsonSerializable()
 class DocumentComment extends Equatable {
   final String id;
   final String content;
@@ -330,30 +286,12 @@ class DocumentComment extends Equatable {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'content': content,
-        'createdAt': createdAt.toIso8601String(),
-        'createdBy': createdBy,
-        'selection': selection?.toJson(),
-        'replies': replies.map((r) => r.toJson()).toList(),
-      };
+  /// Converts this comment to a JSON map
+  Map<String, dynamic> toJson() => _$DocumentCommentToJson(this);
 
-  factory DocumentComment.fromJson(Map<String, dynamic> json) {
-    return DocumentComment(
-      id: json['id'] as String,
-      content: json['content'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      createdBy: json['createdBy'] as String,
-      selection: json['selection'] != null
-          ? DocumentSelection.fromJson(json['selection'] as Map<String, dynamic>)
-          : null,
-      replies: (json['replies'] as List<dynamic>?)
-              ?.map((e) => DocumentComment.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
-    );
-  }
+  /// Creates a comment from a JSON map
+  factory DocumentComment.fromJson(Map<String, dynamic> json) =>
+      _$DocumentCommentFromJson(json);
 
   @override
   List<Object?> get props => [
@@ -367,6 +305,7 @@ class DocumentComment extends Equatable {
 }
 
 /// Represents text selection in a document
+@JsonSerializable()
 class DocumentSelection extends Equatable {
   final int startOffset;
   final int endOffset;
@@ -378,25 +317,23 @@ class DocumentSelection extends Equatable {
     required this.selectedText,
   });
 
-  Map<String, dynamic> toJson() => {
-        'startOffset': startOffset,
-        'endOffset': endOffset,
-        'selectedText': selectedText,
-      };
+  /// Converts this selection to a JSON map
+  Map<String, dynamic> toJson() => _$DocumentSelectionToJson(this);
 
-  factory DocumentSelection.fromJson(Map<String, dynamic> json) {
-    return DocumentSelection(
-      startOffset: json['startOffset'] as int,
-      endOffset: json['endOffset'] as int,
-      selectedText: json['selectedText'] as String,
-    );
-  }
+  /// Creates a selection from a JSON map
+  factory DocumentSelection.fromJson(Map<String, dynamic> json) =>
+      _$DocumentSelectionFromJson(json);
 
   @override
-  List<Object?> get props => [startOffset, endOffset, selectedText];
+  List<Object?> get props => [
+        startOffset,
+        endOffset,
+        selectedText,
+      ];
 }
 
 /// Represents document permissions
+@JsonSerializable()
 class DocumentPermissions extends Equatable {
   final String owner;
   final List<String> editors;
@@ -414,6 +351,7 @@ class DocumentPermissions extends Equatable {
     this.customRoles = const {},
   });
 
+  /// Creates default permissions for a document
   factory DocumentPermissions.defaults(String owner) {
     return DocumentPermissions(owner: owner);
   }
@@ -436,28 +374,12 @@ class DocumentPermissions extends Equatable {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'owner': owner,
-        'editors': editors,
-        'viewers': viewers,
-        'commenters': commenters,
-        'isPublic': isPublic,
-        'customRoles': customRoles,
-      };
+  /// Converts these permissions to a JSON map
+  Map<String, dynamic> toJson() => _$DocumentPermissionsToJson(this);
 
-  factory DocumentPermissions.fromJson(Map<String, dynamic> json) {
-    return DocumentPermissions(
-      owner: json['owner'] as String,
-      editors: (json['editors'] as List<dynamic>?)?.cast<String>() ?? const [],
-      viewers: (json['viewers'] as List<dynamic>?)?.cast<String>() ?? const [],
-      commenters: (json['commenters'] as List<dynamic>?)?.cast<String>() ?? const [],
-      isPublic: json['isPublic'] as bool? ?? false,
-      customRoles: (json['customRoles'] as Map<String, dynamic>?)?.map(
-            (k, v) => MapEntry(k, (v as List<dynamic>).cast<String>()),
-          ) ??
-          const {},
-    );
-  }
+  /// Creates permissions from a JSON map
+  factory DocumentPermissions.fromJson(Map<String, dynamic> json) =>
+      _$DocumentPermissionsFromJson(json);
 
   @override
   List<Object?> get props => [

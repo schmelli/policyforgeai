@@ -1,67 +1,37 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../models/chat.dart';
 
 class AIService {
-  static const String _baseUrl = 'https://api.openai.com/v1/chat/completions';
-  final String _apiKey;
-  final String _model;
-  final double _temperature;
-  final int _maxTokens;
+  final String apiKey;
+  final String model;
+  final double temperature;
+  final int maxTokens;
 
   AIService({
-    required String apiKey,
-    String model = 'gpt-3.5-turbo',
-    double temperature = 0.7,
-    int maxTokens = 1000,
-  })  : _apiKey = apiKey,
-        _model = model,
-        _temperature = temperature,
-        _maxTokens = maxTokens;
+    required this.apiKey,
+    required this.model,
+    required this.temperature,
+    required this.maxTokens,
+  });
 
-  Future<String> generateResponse({
-    required List<ChatMessage> messages,
-    String? documentContext,
-  }) async {
-    final List<Map<String, String>> formattedMessages = [];
-
-    // Add system message with document context if available
-    if (documentContext != null && documentContext.isNotEmpty) {
-      formattedMessages.add({
-        'role': 'system',
-        'content': '''You are an AI assistant helping with document management and policy creation.
-Here is the current document content for context:
-
-$documentContext
-
-Please provide relevant assistance based on this document content.''',
-      });
-    } else {
-      formattedMessages.add({
-        'role': 'system',
-        'content': 'You are an AI assistant helping with document management and policy creation.',
-      });
-    }
-
-    // Add conversation history
-    formattedMessages.addAll(
-      messages.map((msg) => {
-        'role': msg.role == MessageRole.user ? 'user' : 'assistant',
-        'content': msg.content,
-      }),
-    );
-
+  /// Generate a response from the AI model
+  Future<String> generateResponse({required String message}) async {
     final response = await http.post(
-      Uri.parse(_baseUrl),
+      Uri.parse('https://api.openai.com/v1/chat/completions'),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
+        'Authorization': 'Bearer $apiKey',
       },
       body: jsonEncode({
-        'model': _model,
-        'messages': formattedMessages,
-        'temperature': _temperature,
-        'max_tokens': _maxTokens,
+        'model': model,
+        'messages': [
+          {
+            'role': 'user',
+            'content': message,
+          }
+        ],
+        'temperature': temperature,
+        'max_tokens': maxTokens,
       }),
     );
 
@@ -69,7 +39,7 @@ Please provide relevant assistance based on this document content.''',
       final data = jsonDecode(response.body);
       return data['choices'][0]['message']['content'];
     } else {
-      throw Exception('Failed to generate AI response: ${response.body}');
+      throw Exception('Failed to generate response: ${response.body}');
     }
   }
 }

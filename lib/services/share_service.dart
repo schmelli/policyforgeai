@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum SharePermission {
   view,
@@ -132,22 +133,55 @@ class ShareService {
   }
 
   static Future<void> _saveShareLink(ShareLink link) async {
-    // TODO: Implement storage
-    throw UnimplementedError('Storage implementation required');
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Save link by ID
+    await prefs.setString('share_link_${link.id}', jsonEncode(link.toJson()));
+    
+    // Add to document's share links list
+    final docLinks = await _loadDocumentShareLinks(link.documentId);
+    docLinks.add(link);
+    await prefs.setString(
+      'doc_share_links_${link.documentId}',
+      jsonEncode(docLinks.map((l) => l.toJson()).toList()),
+    );
   }
 
   static Future<ShareLink?> _loadShareLink(String id) async {
-    // TODO: Implement storage
-    throw UnimplementedError('Storage implementation required');
+    final prefs = await SharedPreferences.getInstance();
+    final linkJson = prefs.getString('share_link_$id');
+    if (linkJson == null) return null;
+    
+    return ShareLink.fromJson(jsonDecode(linkJson));
   }
 
   static Future<List<ShareLink>> _loadDocumentShareLinks(String documentId) async {
-    // TODO: Implement storage
-    throw UnimplementedError('Storage implementation required');
+    final prefs = await SharedPreferences.getInstance();
+    final linksJson = prefs.getString('doc_share_links_$documentId');
+    if (linksJson == null) return [];
+    
+    final List<dynamic> linksList = jsonDecode(linksJson);
+    return linksList
+        .map((json) => ShareLink.fromJson(json))
+        .where((link) => link.isActive)
+        .toList();
   }
 
   static Future<void> _deactivateShareLink(String id) async {
-    // TODO: Implement storage
-    throw UnimplementedError('Storage implementation required');
+    final link = await _loadShareLink(id);
+    if (link == null) return;
+    
+    final updatedLink = ShareLink(
+      id: link.id,
+      documentId: link.documentId,
+      projectId: link.projectId,
+      permission: link.permission,
+      createdAt: link.createdAt,
+      expiresAt: link.expiresAt,
+      createdBy: link.createdBy,
+      isActive: false,
+    );
+    
+    await _saveShareLink(updatedLink);
   }
 }

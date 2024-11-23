@@ -34,41 +34,65 @@ class _DocumentTreeState extends State<DocumentTree> {
     required bool isFolder,
     required String parentId,
   }) async {
-    return showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Create ${isFolder ? 'Folder' : 'Document'}'),
-        content: TextField(
-          controller: _nameController,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'Name',
-            hintText: 'Enter ${isFolder ? 'folder' : 'document'} name',
+    try {
+      final name = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Create ${isFolder ? 'Folder' : 'Document'}'),
+          content: TextField(
+            controller: _nameController,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Name',
+              hintText: 'Enter ${isFolder ? 'folder' : 'document'} name',
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final name = _nameController.text.trim();
-              if (name.isNotEmpty) {
-                if (isFolder) {
-                  widget.onCreateFolder?.call(name, parentId);
-                } else {
-                  widget.onCreateDocument?.call(name, parentId);
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final name = _nameController.text.trim();
+                if (name.isNotEmpty) {
+                  Navigator.of(context).pop(name);
                 }
-                Navigator.of(context).pop();
-              }
-              _nameController.clear();
-            },
-            child: const Text('Create'),
+                _nameController.clear();
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      );
+
+      if (name != null && name.isNotEmpty) {
+        if (isFolder) {
+          widget.onCreateFolder?.call(name, parentId);
+        } else {
+          widget.onCreateDocument?.call(name, parentId);
+        }
+        
+        // Show a snackbar to indicate the creation is in progress
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Creating ${isFolder ? 'folder' : 'document'}: $name'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error creating ${isFolder ? 'folder' : 'document'}: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
-        ],
-      ),
-    );
+        );
+      }
+    }
   }
 
   Widget _buildNodeIcon(DocumentNode node) {

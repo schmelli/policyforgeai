@@ -13,6 +13,7 @@ import 'widgets/document_tree.dart';
 import 'widgets/project_selection_dialog.dart';
 import 'widgets/settings_panel.dart';
 import 'widgets/chat_panel.dart';
+import 'widgets/document_structure.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,12 +21,12 @@ void main() async {
   final storageService = StorageService();
   await storageService.initialize();
 
-  final settings = await storageService.loadProjectSettings();
+  final settings = await storageService.loadProjectSettings('default');
   final aiService = AIService(
-    apiKey: settings?.aiSettings?.apiKey ?? const String.fromEnvironment('OPENAI_API_KEY'),
-    model: settings?.aiSettings?.model ?? 'gpt-3.5-turbo',
-    temperature: settings?.aiSettings?.temperature ?? 0.7,
-    maxTokens: settings?.aiSettings?.maxTokens ?? 1000,
+    apiKey: settings?.aiSettings.apiKey ?? const String.fromEnvironment('OPENAI_API_KEY'),
+    model: settings?.aiSettings.model ?? 'gpt-3.5-turbo',
+    temperature: settings?.aiSettings.temperature ?? 0.7,
+    maxTokens: settings?.aiSettings.maxTokens ?? 1000,
   );
 
   runApp(
@@ -179,6 +180,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
   late final DocumentTreeBloc _documentTreeBloc;
   late final DocumentBloc _documentBloc;
   late final SettingsBloc _settingsBloc;
+  late final ChatBloc _chatBloc;
 
   @override
   void initState() {
@@ -194,6 +196,11 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
     _settingsBloc = SettingsBloc(
       storageService: widget.storageService,
       projectId: widget.projectId,
+    );
+    _chatBloc = ChatBloc(
+      aiService: context.read<AIService>(),
+      storageService: widget.storageService,
+      documentId: '',
     );
     _documentTreeBloc.add(LoadDocumentTree(widget.projectId));
     _settingsBloc.add(LoadSettings(widget.projectId));
@@ -233,22 +240,64 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
                 BlocProvider.value(value: _documentTreeBloc),
                 BlocProvider.value(value: _documentBloc),
                 BlocProvider.value(value: _settingsBloc),
+                BlocProvider.value(value: _chatBloc),
               ],
               child: _selectedIndex == 0
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Document Tree Panel
+                        // File Explorer Panel
                         SizedBox(
                           width: 250,
                           child: Card(
                             margin: const EdgeInsets.all(8.0),
-                            child: DocumentTree(
-                              onCreateFolder: (String name, String? parentId) {
-                                _documentTreeBloc.add(CreateFolder(name, parentId: parentId));
+                            child: BlocBuilder<DocumentTreeBloc, DocumentTreeState>(
+                              builder: (context, state) {
+                                if (state is DocumentTreeLoaded) {
+                                  return DocumentTree(
+                                    nodes: state.nodes,
+                                    onCreateFolder: (String name, String? parentId) {
+                                      _documentTreeBloc.add(CreateFolder(name, parentId: parentId));
+                                    },
+                                    onCreateDocument: (String name, String? parentId) {
+                                      _documentTreeBloc.add(CreateDocument(name, parentId: parentId));
+                                    },
+                                    onNodeSelected: (node) {
+                                      _documentTreeBloc.add(SelectNode(node));
+                                    },
+                                  );
+                                }
+                                if (state is DocumentTreeError) {
+                                  return Center(
+                                    child: Text(
+                                      'Error: ${state.message}',
+                                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                                    ),
+                                  );
+                                }
+                                return const Center(child: CircularProgressIndicator());
                               },
-                              onCreateDocument: (String name, String? parentId) {
-                                _documentTreeBloc.add(CreateDocument(name, parentId: parentId));
+                            ),
+                          ),
+                        ),
+                        // Document Structure Panel
+                        SizedBox(
+                          width: 250,
+                          child: Card(
+                            margin: const EdgeInsets.all(8.0),
+                            child: BlocBuilder<DocumentTreeBloc, DocumentTreeState>(
+                              builder: (context, state) {
+                                if (state is DocumentTreeLoaded && 
+                                    state.selectedNode != null && 
+                                    state.selectedNode is DocumentLeafNode) {
+                                  final document = (state.selectedNode as DocumentLeafNode).document;
+                                  return DocumentStructure(
+                                    document: document as PolicyDocument,
+                                  );
+                                }
+                                return const Center(
+                                  child: Text('Select a document to view its structure'),
+                                );
                               },
                             ),
                           ),
@@ -260,18 +309,19 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
                             child: BlocBuilder<DocumentTreeBloc, DocumentTreeState>(
                               builder: (context, state) {
                                 if (state is DocumentTreeLoaded &&
-                                    state.selectedNode != null) {
-                                  if (state.selectedNode is DocumentLeafNode) {
-                                    return DocumentViewer(
-                                      document: (state.selectedNode
-                                              as DocumentLeafNode)
-                                          .document,
-                                      onSave: (String content) {
-                                        _documentBloc
-                                            .add(UpdateDocument(content: content));
-                                      },
-                                    );
-                                  }
+                                    state.selectedNode != null &&
+                                    state.selectedNode is DocumentLeafNode) {
+                                  final document = (state.selectedNode as DocumentLeafNode).document;
+                                  _chatBloc.add(LoadChat(document.id));
+                                  return DocumentViewer(
+                                    document: document,
+                                    onSave: (String content) {
+                                      _documentBloc.add(UpdateDocument(
+                                        documentId: document.id,
+                                        content: content,
+                                      ));
+                                    },
+                                  );
                                 }
                                 return const Center(
                                   child: Text('Select a document to view'),
@@ -283,25 +333,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
                         // Chat Panel
                         SizedBox(
                           width: 300,
-                          child: BlocBuilder<DocumentTreeBloc, DocumentTreeState>(
-                            builder: (context, state) {
-                              final documentId = state is DocumentTreeLoaded && 
-                                state.selectedNode is DocumentLeafNode
-                                  ? (state.selectedNode as DocumentLeafNode).document.id
-                                  : '';
-                              
-                              return BlocProvider(
-                                create: (context) => ChatBloc(
-                                  aiService: context.read<AIService>(),
-                                  storageService: context.read<StorageService>(),
-                                  documentId: documentId,
-                                ),
-                                child: ChatPanel(
-                                  documentId: documentId,
-                                ),
-                              );
-                            },
-                          ),
+                          child: ChatPanel(),
                         ),
                       ],
                     )
@@ -321,22 +353,27 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
     _documentTreeBloc.close();
     _documentBloc.close();
     _settingsBloc.close();
+    _chatBloc.close();
     super.dispose();
   }
 }
 
 class DocumentViewer extends StatelessWidget {
-  final PolicyDocument? document;
+  final PolicyDocument document;
   final void Function(String)? onSave;
 
-  const DocumentViewer({super.key, this.document, this.onSave});
+  const DocumentViewer({
+    super.key,
+    required this.document,
+    this.onSave,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         AppBar(
-          title: Text(document?.name ?? 'Untitled Document'),
+          title: Text(document.title),
           centerTitle: true,
           actions: [
             IconButton(
@@ -351,7 +388,7 @@ class DocumentViewer extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: TextField(
-              controller: TextEditingController(text: document?.content ?? ''),
+              controller: TextEditingController(text: document.content),
               maxLines: null,
               decoration: const InputDecoration(
                 border: InputBorder.none,
@@ -366,63 +403,8 @@ class DocumentViewer extends StatelessWidget {
   }
 
   void _handleSaveDocument(BuildContext context) {
-    if (onSave != null && document != null) {
-      onSave!(document!.content);
+    if (onSave != null) {
+      onSave!(document.content);
     }
-  }
-}
-
-class AIChatPanel extends StatelessWidget {
-  const AIChatPanel({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        AppBar(
-          title: const Text('AI Assistant'),
-          centerTitle: true,
-        ),
-        Expanded(
-          child: Column(
-            children: [
-              const Expanded(
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(
-                    child: Text('Chat messages will appear here'),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        decoration: const InputDecoration(
-                          hintText: 'Ask me anything...',
-                          border: OutlineInputBorder(),
-                        ),
-                        onSubmitted: (value) {
-                          // TODO: Implement chat
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: () {
-                        // TODO: Implement send message
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
   }
 }

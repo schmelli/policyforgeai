@@ -126,7 +126,10 @@ class DocumentTreeBloc extends Bloc<DocumentTreeEvent, DocumentTreeState> {
     CreateFolder event,
     Emitter<DocumentTreeState> emit,
   ) async {
-    if (state is! DocumentTreeLoaded) return;
+    if (state is! DocumentTreeLoaded) {
+      emit(const DocumentTreeError('Document tree not loaded'));
+      return;
+    }
 
     final currentState = state as DocumentTreeLoaded;
     try {
@@ -143,9 +146,19 @@ class DocumentTreeBloc extends Bloc<DocumentTreeEvent, DocumentTreeState> {
       );
 
       await _storageService.saveProjectTree(projectId, updatedNodes);
-      emit(currentState.copyWith(nodes: updatedNodes));
+      
+      // Reload the tree to ensure we have the latest state
+      final reloadedNodes = await _storageService.loadProjectTree(projectId);
+      
+      emit(currentState.copyWith(
+        nodes: reloadedNodes,
+        selectedNode: newFolder, // Automatically select the new folder
+      ));
     } catch (e) {
-      emit(DocumentTreeError(e.toString()));
+      print('Error creating folder: $e');
+      emit(DocumentTreeError('Failed to create folder: ${e.toString()}'));
+      // Restore the previous state after error
+      emit(currentState);
     }
   }
 
@@ -153,13 +166,17 @@ class DocumentTreeBloc extends Bloc<DocumentTreeEvent, DocumentTreeState> {
     CreateDocument event,
     Emitter<DocumentTreeState> emit,
   ) async {
-    if (state is! DocumentTreeLoaded) return;
+    if (state is! DocumentTreeLoaded) {
+      emit(const DocumentTreeError('Document tree not loaded'));
+      return;
+    }
 
     final currentState = state as DocumentTreeLoaded;
     try {
       final newDocument = DocumentLeafNode.create(
         name: event.name,
         createdBy: 'current-user', // TODO: Get from auth
+        projectId: projectId,
         parentId: event.parentId,
       );
 
@@ -169,11 +186,25 @@ class DocumentTreeBloc extends Bloc<DocumentTreeEvent, DocumentTreeState> {
         event.parentId,
       );
 
+      // First save the document content
       await _storageService.saveDocument(projectId, newDocument);
+      
+      // Then update the tree structure
       await _storageService.saveProjectTree(projectId, updatedNodes);
-      emit(currentState.copyWith(nodes: updatedNodes));
+      
+      // Reload the tree to ensure we have the latest state
+      final reloadedNodes = await _storageService.loadProjectTree(projectId);
+      
+      // Finally, emit the new state with the updated tree
+      emit(currentState.copyWith(
+        nodes: reloadedNodes,
+        selectedNode: newDocument, // Automatically select the new document
+      ));
     } catch (e) {
-      emit(DocumentTreeError(e.toString()));
+      print('Error creating document: $e');
+      emit(DocumentTreeError('Failed to create document: ${e.toString()}'));
+      // Restore the previous state after error
+      emit(currentState);
     }
   }
 

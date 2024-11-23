@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/share_service.dart';
 import '../widgets/document_viewer.dart';
-import '../models/policy_document.dart';
+import '../models/document.dart';
+import '../models/project.dart';
 
 class SharedDocumentPage extends StatefulWidget {
   final String shareUrl;
@@ -108,7 +109,15 @@ class _SharedDocumentPageState extends State<SharedDocumentPage> {
         ],
       ),
       body: DocumentViewer(
-        document: _document!,
+        document: DocumentLeafNode(
+          id: _document!.id,
+          name: _document!.title,
+          parentId: null,
+          createdAt: _document!.createdAt,
+          modifiedAt: _document!.modifiedAt,
+          createdBy: _document!.createdBy,
+          document: _document!,
+        ),
         readOnly: _shareLink?.permission != SharePermission.edit,
         onContentChanged: (content) {
           if (_shareLink?.permission == SharePermission.edit) {

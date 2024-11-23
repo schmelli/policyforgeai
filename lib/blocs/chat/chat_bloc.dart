@@ -112,40 +112,48 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
   }
 
   Future<void> _onSendMessage(SendMessage event, Emitter<ChatState> emit) async {
-    try {
-      if (_currentThread == null) {
-        _currentThread = ChatThread(messages: []);
+    if (state is ChatLoaded) {
+      final currentState = state as ChatLoaded;
+      try {
+        // Update state to show processing
+        emit(ChatLoaded(
+          thread: currentState.thread,
+          isProcessing: true,
+        ));
+
+        // Generate AI response
+        final response = await _aiService.generateResponse(message: event.message);
+
+        // Create new message
+        final message = ChatMessage(
+          content: event.message,
+          role: MessageRole.user,
+          timestamp: DateTime.now(),
+        );
+
+        // Create AI response message
+        final aiMessage = ChatMessage(
+          content: response,
+          role: MessageRole.assistant,
+          timestamp: DateTime.now(),
+        );
+
+        // Update thread with new messages
+        final updatedThread = currentState.thread.copyWith(
+          messages: [...currentState.thread.messages, message, aiMessage],
+        );
+
+        // Save updated thread
+        await _storageService.saveChatThread(_documentId, updatedThread);
+
+        // Update state with new messages
+        emit(ChatLoaded(
+          thread: updatedThread,
+          isProcessing: false,
+        ));
+      } catch (e) {
+        emit(ChatError('Failed to send message: $e'));
       }
-
-      final userMessage = ChatMessage(
-        role: MessageRole.user,
-        content: event.message,
-        timestamp: DateTime.now(),
-      );
-
-      _currentThread!.messages.add(userMessage);
-      emit(ChatLoaded(thread: _currentThread!, isProcessing: true));
-
-      // Save the user message
-      await _storageService.saveChatThread(_documentId, _currentThread!);
-
-      // Get AI response
-      final response = await _aiService.generateResponse(event.message);
-      
-      final aiMessage = ChatMessage(
-        role: MessageRole.assistant,
-        content: response,
-        timestamp: DateTime.now(),
-      );
-
-      _currentThread!.messages.add(aiMessage);
-      
-      // Save the AI response
-      await _storageService.saveChatThread(_documentId, _currentThread!);
-      
-      emit(ChatLoaded(thread: _currentThread!));
-    } catch (e) {
-      emit(ChatError('Failed to send message: $e'));
     }
   }
 

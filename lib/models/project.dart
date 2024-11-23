@@ -1,9 +1,13 @@
 import 'package:equatable/equatable.dart';
+import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
 import 'document.dart';
 import 'settings.dart';
 
+part 'project.g.dart';
+
 /// Represents a project in the system
+@JsonSerializable(explicitToJson: true)
 class Project extends Equatable {
   final String id;
   final String name;
@@ -11,6 +15,7 @@ class Project extends Equatable {
   final DateTime createdAt;
   final DateTime modifiedAt;
   final String createdBy;
+  @JsonKey(toJson: _nodesToJson, fromJson: _nodesFromJson)
   final List<DocumentNode> rootNodes;
   final ProjectSettings settings;
 
@@ -25,6 +30,7 @@ class Project extends Equatable {
     required this.settings,
   });
 
+  /// Creates a new project with default settings
   factory Project.create({
     required String name,
     required String description,
@@ -43,6 +49,7 @@ class Project extends Equatable {
     );
   }
 
+  /// Creates a copy of this project with the given fields replaced
   Project copyWith({
     String? id,
     String? name,
@@ -65,32 +72,18 @@ class Project extends Equatable {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'description': description,
-      'createdAt': createdAt.toIso8601String(),
-      'modifiedAt': modifiedAt.toIso8601String(),
-      'createdBy': createdBy,
-      'rootNodes': rootNodes.map((node) => node.toJson()).toList(),
-      'settings': settings.toJson(),
-    };
+  /// Converts this project to a JSON map
+  Map<String, dynamic> toJson() => _$ProjectToJson(this);
+
+  /// Creates a project from a JSON map
+  factory Project.fromJson(Map<String, dynamic> json) => _$ProjectFromJson(json);
+
+  static List<Map<String, dynamic>> _nodesToJson(List<DocumentNode> nodes) {
+    return nodes.map((node) => node.toJson()).toList();
   }
 
-  factory Project.fromJson(Map<String, dynamic> json) {
-    return Project(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      description: json['description'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      modifiedAt: DateTime.parse(json['modifiedAt'] as String),
-      createdBy: json['createdBy'] as String,
-      rootNodes: (json['rootNodes'] as List<dynamic>)
-          .map((node) => DocumentNode.fromJson(node as Map<String, dynamic>))
-          .toList(),
-      settings: ProjectSettings.fromJson(json['settings'] as Map<String, dynamic>),
-    );
+  static List<DocumentNode> _nodesFromJson(List<dynamic> json) {
+    return json.map((node) => DocumentNode.fromJson(node as Map<String, dynamic>)).toList();
   }
 
   @override
@@ -110,7 +103,7 @@ class Project extends Equatable {
 abstract class DocumentNode extends Equatable {
   final String id;
   final String name;
-  final String parentId;
+  final String? parentId;
   final DateTime createdAt;
   final DateTime modifiedAt;
   final String createdBy;
@@ -118,15 +111,14 @@ abstract class DocumentNode extends Equatable {
   const DocumentNode({
     required this.id,
     required this.name,
-    required this.parentId,
+    this.parentId,
     required this.createdAt,
     required this.modifiedAt,
     required this.createdBy,
   });
 
-  Map<String, dynamic> toJson();
-
-  factory DocumentNode.fromJson(Map<String, dynamic> json) {
+  /// Creates a node from a JSON map
+  static DocumentNode fromJson(Map<String, dynamic> json) {
     final type = json['type'] as String;
     switch (type) {
       case 'folder':
@@ -138,35 +130,44 @@ abstract class DocumentNode extends Equatable {
     }
   }
 
+  /// Converts this node to a JSON map
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'parentId': parentId,
+      'createdAt': createdAt.toIso8601String(),
+      'modifiedAt': modifiedAt.toIso8601String(),
+      'createdBy': createdBy,
+      'type': runtimeType.toString().toLowerCase(),
+    };
+  }
+
   @override
-  List<Object?> get props => [
-        id,
-        name,
-        parentId,
-        createdAt,
-        modifiedAt,
-        createdBy,
-      ];
+  List<Object?> get props => [id, name, parentId, createdAt, modifiedAt, createdBy];
 }
 
 /// Represents a folder in the document tree
+@JsonSerializable(explicitToJson: true)
 class FolderNode extends DocumentNode {
+  @JsonKey(toJson: Project._nodesToJson, fromJson: Project._nodesFromJson)
   final List<DocumentNode> children;
 
   const FolderNode({
     required super.id,
     required super.name,
-    required super.parentId,
+    super.parentId,
     required super.createdAt,
     required super.modifiedAt,
     required super.createdBy,
     required this.children,
   });
 
+  /// Creates a new folder node
   factory FolderNode.create({
     required String name,
-    required String parentId,
     required String createdBy,
+    String? parentId,
   }) {
     final now = DateTime.now();
     return FolderNode(
@@ -180,7 +181,7 @@ class FolderNode extends DocumentNode {
     );
   }
 
-  @override
+  /// Creates a copy of this folder with the given fields replaced
   FolderNode copyWith({
     String? id,
     String? name,
@@ -201,72 +202,64 @@ class FolderNode extends DocumentNode {
     );
   }
 
+  /// Converts this folder to a JSON map
   @override
   Map<String, dynamic> toJson() {
-    return {
-      'type': 'folder',
-      'id': id,
-      'name': name,
-      'parentId': parentId,
-      'createdAt': createdAt.toIso8601String(),
-      'modifiedAt': modifiedAt.toIso8601String(),
-      'createdBy': createdBy,
-      'children': children.map((node) => node.toJson()).toList(),
-    };
+    final json = super.toJson();
+    json.addAll(_$FolderNodeToJson(this));
+    return json;
   }
 
+  /// Creates a folder from a JSON map
   factory FolderNode.fromJson(Map<String, dynamic> json) {
-    return FolderNode(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      parentId: json['parentId'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      modifiedAt: DateTime.parse(json['modifiedAt'] as String),
-      createdBy: json['createdBy'] as String,
-      children: (json['children'] as List<dynamic>)
-          .map((node) => DocumentNode.fromJson(node as Map<String, dynamic>))
-          .toList(),
-    );
+    final node = _$FolderNodeFromJson(json);
+    return node;
   }
 
   @override
-  List<Object?> get props => [
-        ...super.props,
-        children,
-      ];
+  List<Object?> get props => [...super.props, children];
 }
 
 /// Represents a document in the document tree
+@JsonSerializable(explicitToJson: true)
 class DocumentLeafNode extends DocumentNode {
-  final PolicyDocument? document;
+  final PolicyDocument document;
 
   const DocumentLeafNode({
     required super.id,
     required super.name,
-    required super.parentId,
+    super.parentId,
     required super.createdAt,
     required super.modifiedAt,
     required super.createdBy,
-    this.document,
+    required this.document,
   });
 
+  /// Creates a new document node
   factory DocumentLeafNode.create({
     required String name,
-    required String parentId,
     required String createdBy,
+    required String projectId,
+    String? parentId,
   }) {
     final now = DateTime.now();
+    final id = const Uuid().v4();
     return DocumentLeafNode(
-      id: const Uuid().v4(),
+      id: id,
       name: name,
       parentId: parentId,
       createdAt: now,
       modifiedAt: now,
       createdBy: createdBy,
+      document: PolicyDocument.create(
+        title: name,
+        createdBy: createdBy,
+        projectId: projectId,
+      ),
     );
   }
 
-  @override
+  /// Creates a copy of this document node with the given fields replaced
   DocumentLeafNode copyWith({
     String? id,
     String? name,
@@ -287,37 +280,36 @@ class DocumentLeafNode extends DocumentNode {
     );
   }
 
+  /// Whether this document is read-only for the current user
+  bool get readOnly {
+    // TODO: Get current user ID from auth service
+    const currentUserId = '';
+    final permissions = document.permissions;
+    
+    // Owner and editors have write access
+    if (permissions.owner == currentUserId || 
+        permissions.editors.contains(currentUserId)) {
+      return false;
+    }
+    
+    // All other users (viewers, commenters) have read-only access
+    return true;
+  }
+
+  /// Converts this document node to a JSON map
   @override
   Map<String, dynamic> toJson() {
-    return {
-      'type': 'document',
-      'id': id,
-      'name': name,
-      'parentId': parentId,
-      'createdAt': createdAt.toIso8601String(),
-      'modifiedAt': modifiedAt.toIso8601String(),
-      'createdBy': createdBy,
-      'document': document?.toJson(),
-    };
+    final json = super.toJson();
+    json.addAll(_$DocumentLeafNodeToJson(this));
+    return json;
   }
 
+  /// Creates a document node from a JSON map
   factory DocumentLeafNode.fromJson(Map<String, dynamic> json) {
-    return DocumentLeafNode(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      parentId: json['parentId'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      modifiedAt: DateTime.parse(json['modifiedAt'] as String),
-      createdBy: json['createdBy'] as String,
-      document: json['document'] == null
-          ? null
-          : PolicyDocument.fromJson(json['document'] as Map<String, dynamic>),
-    );
+    final node = _$DocumentLeafNodeFromJson(json);
+    return node;
   }
 
   @override
-  List<Object?> get props => [
-        ...super.props,
-        document,
-      ];
+  List<Object?> get props => [...super.props, document];
 }

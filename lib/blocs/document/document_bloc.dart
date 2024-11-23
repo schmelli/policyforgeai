@@ -23,12 +23,16 @@ class LoadDocument extends DocumentEvent {
 
 /// Event to update document content
 class UpdateDocument extends DocumentEvent {
+  final String documentId;
   final String content;
 
-  const UpdateDocument(this.content);
+  const UpdateDocument({
+    required this.documentId,
+    required this.content,
+  });
 
   @override
-  List<Object?> get props => [content];
+  List<Object?> get props => [documentId, content];
 }
 
 /// Event to save document changes
