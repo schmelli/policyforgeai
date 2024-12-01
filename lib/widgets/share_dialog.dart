@@ -9,11 +9,11 @@ class ShareDialog extends StatefulWidget {
   final String createdBy;
 
   const ShareDialog({
-    Key? key,
+    super.key,
     required this.documentId,
     required this.projectId,
     required this.createdBy,
-  }) : super(key: key);
+  });
 
   @override
   State<ShareDialog> createState() => _ShareDialogState();

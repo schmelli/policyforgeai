@@ -7,7 +7,7 @@ import '../models/project.dart';
 class SharedDocumentPage extends StatefulWidget {
   final String shareUrl;
 
-  const SharedDocumentPage({Key? key, required this.shareUrl}) : super(key: key);
+  const SharedDocumentPage({super.key, required this.shareUrl});
 
   @override
   State<SharedDocumentPage> createState() => _SharedDocumentPageState();
@@ -40,14 +40,15 @@ class _SharedDocumentPageState extends State<SharedDocumentPage> {
 
       final validLink = await ShareService.getShareLink(shareLink.id);
       if (validLink == null) {
-        setState(() => _error = 'This share link has expired or been deactivated');
+        setState(
+            () => _error = 'This share link has expired or been deactivated');
         return;
       }
 
       // TODO: Load document using DocumentService
       // final document = await DocumentService.getDocument(validLink.documentId);
       // setState(() => _document = document);
-      
+
       setState(() => _shareLink = validLink);
     } catch (e) {
       setState(() => _error = 'Failed to load document: $e');

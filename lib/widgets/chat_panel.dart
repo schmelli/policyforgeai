@@ -59,7 +59,7 @@ class _ChatHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
@@ -167,7 +167,7 @@ class _ProcessingIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Container(
       padding: const EdgeInsets.all(16.0),
       margin: const EdgeInsets.only(
@@ -238,7 +238,9 @@ class _MessageBubble extends StatelessWidget {
             Text(
               message.content,
               style: TextStyle(
-                color: isUser ? colorScheme.onPrimary : colorScheme.onPrimaryContainer,
+                color: isUser
+                    ? colorScheme.onPrimary
+                    : colorScheme.onPrimaryContainer,
               ),
             ),
             const SizedBox(height: 4),
@@ -246,7 +248,7 @@ class _MessageBubble extends StatelessWidget {
               '${message.timestamp.hour}:${message.timestamp.minute.toString().padLeft(2, '0')}',
               style: TextStyle(
                 fontSize: 12,
-                color: isUser 
+                color: isUser
                     ? colorScheme.onPrimary.withOpacity(0.7)
                     : colorScheme.onPrimaryContainer.withOpacity(0.7),
               ),
@@ -297,7 +299,7 @@ class _MessageInputState extends State<_MessageInput> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
@@ -353,7 +355,7 @@ class _MessageInputState extends State<_MessageInput> {
             style: IconButton.styleFrom(
               backgroundColor: colorScheme.primary,
               foregroundColor: colorScheme.onPrimary,
-              disabledBackgroundColor: colorScheme.surfaceVariant,
+              disabledBackgroundColor: colorScheme.surfaceContainerHighest,
               disabledForegroundColor: colorScheme.onSurfaceVariant,
             ),
           ),

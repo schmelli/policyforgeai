@@ -126,10 +126,10 @@ class DocumentBloc extends Bloc<DocumentEvent, DocumentState> {
   }
 
   /// Handles the UpdateDocument event
-  void _onUpdateDocument(
+  Future<void> _onUpdateDocument(
     UpdateDocument event,
     Emitter<DocumentState> emit,
-  ) {
+  ) async {
     if (state is! DocumentLoaded) {
       emit(const DocumentError('No document loaded'));
       return;
@@ -138,10 +138,6 @@ class DocumentBloc extends Bloc<DocumentEvent, DocumentState> {
     try {
       final currentState = state as DocumentLoaded;
       final currentDoc = currentState.document.document;
-      if (currentDoc == null) {
-        emit(const DocumentError('Document data is missing'));
-        return;
-      }
 
       final updatedDocument = currentDoc.copyWith(
         content: event.content,
@@ -153,9 +149,12 @@ class DocumentBloc extends Bloc<DocumentEvent, DocumentState> {
         document: updatedDocument,
       );
 
+      // Save the updated document to storage
+      await _storageService.saveDocument(projectId, updatedNode);
+
       emit(DocumentLoaded(
         document: updatedNode,
-        isDirty: true,
+        isDirty: false,
       ));
     } catch (e) {
       emit(DocumentError(e.toString()));

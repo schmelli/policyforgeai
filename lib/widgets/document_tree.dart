@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../models/project.dart';
+import '../blocs/document_tree/document_tree_bloc.dart';
 
 class DocumentTree extends StatefulWidget {
   final List<DocumentNode> nodes;
-  final Function(String name, String parentId)? onCreateFolder;
-  final Function(String name, String parentId)? onCreateDocument;
-  final Function(DocumentNode)? onNodeSelected;
+  final String? selectedId;
+  final void Function(String id)? onNodeSelected;
+  final void Function(DocumentNode node, String? newParentId)? onNodeMoved;
+  final String projectId;
 
   const DocumentTree({
     super.key,
-    this.nodes = const [],
+    required this.nodes,
+    this.selectedId,
     this.onNodeSelected,
-    this.onCreateFolder,
-    this.onCreateDocument,
+    this.onNodeMoved,
+    required this.projectId,
   });
 
   @override
@@ -20,204 +24,185 @@ class DocumentTree extends StatefulWidget {
 }
 
 class _DocumentTreeState extends State<DocumentTree> {
-  Set<String> expandedNodes = {};
-  final TextEditingController _nameController = TextEditingController();
+  final Set<String> _expandedNodes = {};
 
   @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: widget.nodes.length,
+      itemBuilder: (context, index) {
+        return _buildNode(widget.nodes[index], context);
+      },
+    );
   }
 
-  Future<void> _showCreateDialog({
-    required BuildContext context,
-    required bool isFolder,
-    required String parentId,
-  }) async {
-    try {
-      final name = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Create ${isFolder ? 'Folder' : 'Document'}'),
-          content: TextField(
-            controller: _nameController,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: 'Name',
-              hintText: 'Enter ${isFolder ? 'folder' : 'document'} name',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                final name = _nameController.text.trim();
-                if (name.isNotEmpty) {
-                  Navigator.of(context).pop(name);
-                }
-                _nameController.clear();
-              },
-              child: const Text('Create'),
-            ),
-          ],
-        ),
-      );
-
-      if (name != null && name.isNotEmpty) {
-        if (isFolder) {
-          widget.onCreateFolder?.call(name, parentId);
-        } else {
-          widget.onCreateDocument?.call(name, parentId);
-        }
-        
-        // Show a snackbar to indicate the creation is in progress
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Creating ${isFolder ? 'folder' : 'document'}: $name'),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error creating ${isFolder ? 'folder' : 'document'}: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    }
-  }
-
-  Widget _buildNodeIcon(DocumentNode node) {
-    if (node is FolderNode) {
-      return expandedNodes.contains(node.id)
-          ? const Icon(Icons.folder_open)
-          : const Icon(Icons.folder);
-    } else {
-      return const Icon(Icons.description);
-    }
-  }
-
-  Widget _buildNode(DocumentNode node, {required bool isRoot}) {
+  Widget _buildNode(DocumentNode node, BuildContext context, {int depth = 0}) {
+    final isSelected = node.id == widget.selectedId;
     final children = node is FolderNode ? node.children : <DocumentNode>[];
     final hasChildren = children.isNotEmpty;
-    final isExpanded = expandedNodes.contains(node.id);
+    final isExpanded = _expandedNodes.contains(node.id);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          onTap: () {
-            if (node is FolderNode) {
-              setState(() {
-                if (isExpanded) {
-                  expandedNodes.remove(node.id);
-                } else {
-                  expandedNodes.add(node.id);
-                }
-              });
-            }
-            widget.onNodeSelected?.call(node);
+        DragTarget<DocumentNode>(
+          onWillAcceptWithDetails: (data) {
+            if (data == null) return false;
+            if (data.id == node.id) return false;
+            // Don't allow dropping onto a document or onto a parent/ancestor
+            if (node is DocumentLeafNode) return false;
+            return true;
           },
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: isRoot ? 0 : 16.0,
-              top: 4.0,
-              bottom: 4.0,
-            ),
-            child: Row(
-              children: [
-                _buildNodeIcon(node),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    node.name,
-                    style: Theme.of(context).textTheme.bodyMedium,
+          onAcceptWithDetails: (data) {
+            widget.onNodeMoved?.call(data, node.id);
+            context.read<DocumentTreeBloc>().add(
+                  MoveNode(
+                    node: data,
+                    newParentId: node.id,
+                  ),
+                );
+          },
+          builder: (context, candidateData, rejectedData) {
+            return Draggable<DocumentNode>(
+              data: node,
+              feedback: Material(
+                elevation: 4,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  color: Theme.of(context).colorScheme.surface,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        node is FolderNode ? Icons.folder : Icons.description,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(node.name),
+                    ],
                   ),
                 ),
-                if (node is FolderNode)
-                  IconButton(
-                    icon: const Icon(Icons.create_new_folder),
-                    onPressed: () => _showCreateDialog(
-                      context: context,
-                      isFolder: true,
-                      parentId: node.id,
-                    ),
+              ),
+              child: InkWell(
+                onTap: () => widget.onNodeSelected?.call(node.id),
+                child: Container(
+                  padding: EdgeInsets.only(
+                    left: (depth * 24).toDouble(),
+                    top: 8,
+                    bottom: 8,
+                    right: 8,
                   ),
-                if (node is FolderNode)
-                  IconButton(
-                    icon: const Icon(Icons.note_add),
-                    onPressed: () => _showCreateDialog(
-                      context: context,
-                      isFolder: false,
-                      parentId: node.id,
-                    ),
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primaryContainer
+                      : null,
+                  child: Row(
+                    children: [
+                      if (node is FolderNode)
+                        IconButton(
+                          icon: Icon(
+                            hasChildren
+                                ? (isExpanded
+                                    ? Icons.expand_more
+                                    : Icons.chevron_right)
+                                : Icons.chevron_right,
+                            size: 16,
+                          ),
+                          onPressed: hasChildren
+                              ? () {
+                                  setState(() {
+                                    if (isExpanded) {
+                                      _expandedNodes.remove(node.id);
+                                    } else {
+                                      _expandedNodes.add(node.id);
+                                    }
+                                  });
+                                }
+                              : null,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                            minWidth: 24,
+                            minHeight: 24,
+                          ),
+                        )
+                      else
+                        const SizedBox(width: 24),
+                      Icon(
+                        node is FolderNode ? Icons.folder : Icons.description,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(node.name)),
+                      if (node is FolderNode)
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert, size: 16),
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'new_folder',
+                              child: Text('New Folder'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'new_document',
+                              child: Text('New Document'),
+                            ),
+                          ],
+                          onSelected: (value) {
+                            _showCreateDialog(
+                                context, node.id, value == 'new_folder');
+                          },
+                        ),
+                    ],
                   ),
-              ],
-            ),
-          ),
+                ),
+              ),
+            );
+          },
         ),
         if (hasChildren && isExpanded)
-          Padding(
-            padding: const EdgeInsets.only(left: 16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: children
-                  .map((child) => _buildNode(
-                        child,
-                        isRoot: false,
-                      ))
-                  .toList(),
-            ),
-          ),
+          ...children
+              .map((child) => _buildNode(child, context, depth: depth + 1)),
       ],
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.create_new_folder),
-                  onPressed: () => _showCreateDialog(
-                    context: context,
-                    isFolder: true,
-                    parentId: '',
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.note_add),
-                  onPressed: () => _showCreateDialog(
-                    context: context,
-                    isFolder: false,
-                    parentId: '',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ...widget.nodes
-                .map((node) => _buildNode(
-                      node,
-                      isRoot: true,
-                    ))
-                .toList(),
-          ],
+  void _showCreateDialog(BuildContext context, String parentId, bool isFolder) {
+    final TextEditingController controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('New ${isFolder ? 'Folder' : 'Document'}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Name',
+            hintText: 'Enter ${isFolder ? 'folder' : 'document'} name',
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isNotEmpty) {
+                final bloc = context.read<DocumentTreeBloc>();
+                if (isFolder) {
+                  bloc.add(CreateFolder(name, parentId: parentId));
+                } else {
+                  bloc.add(CreateDocument(
+                    name,
+                    parentId: parentId,
+                    projectId: widget.projectId,
+                  ));
+                }
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
       ),
     );
   }

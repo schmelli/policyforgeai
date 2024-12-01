@@ -5,13 +5,19 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_quill/quill_delta.dart';
 import '../models/document.dart';
 import '../blocs/document/document_bloc.dart';
+import '../blocs/document_tree/document_tree_bloc.dart';
+import '../models/project.dart';
 
 class DocumentStructure extends StatefulWidget {
   final PolicyDocument document;
+  final Function? onContentChanged;
+  final String projectId;
 
   const DocumentStructure({
     super.key,
     required this.document,
+    required this.projectId,
+    this.onContentChanged,
   });
 
   @override
@@ -38,247 +44,293 @@ class _DocumentStructureState extends State<DocumentStructure> {
 
   void _parseSections() {
     try {
-      // Parse the QuillEditor content to extract sections
+      print('Parsing sections from content: ${widget.document.content}');
+      if (widget.document.content.isEmpty) {
+        print('Empty document content');
+        setState(() {
+          _sections = [];
+        });
+        return;
+      }
+
       final docJson = jsonDecode(widget.document.content);
-      if (docJson is! List) {
-        throw FormatException('Invalid document format');
-      }
-
+      final doc = Document.fromJson(docJson);
       final List<DocumentSection> sections = [];
-      int currentLevel = 1;
-      DocumentSection? currentSection;
-      
-      int currentIndex = 0;
-      for (final op in docJson) {
-        if (op is! Map<String, dynamic>) continue;
-        
-        if (op.containsKey('insert') && op.containsKey('attributes')) {
-          final attrs = op['attributes'] as Map<String, dynamic>;
-          if (attrs.containsKey('header')) {
-            final level = attrs['header'] as int;
-            final text = op['insert'] as String? ?? '';
-            
-            if (text.trim().isNotEmpty) {
-              final newSection = DocumentSection(
-                title: text.trim(),
-                level: level,
-                index: currentIndex,
-              );
 
-              if (level == 1) {
-                sections.add(newSection);
-                currentSection = newSection;
-                currentLevel = 1;
-              } else if (currentSection != null && level > currentLevel) {
-                currentSection.subsections.add(newSection);
-                currentLevel = level;
-              } else if (currentSection != null && level == currentLevel) {
-                final parent = _findParentSection(sections, level - 1);
-                if (parent != null) {
-                  parent.subsections.add(newSection);
-                } else {
-                  sections.add(newSection);
-                }
-              } else if (level < currentLevel) {
-                final parent = _findParentSection(sections, level - 1);
-                if (parent != null) {
-                  parent.subsections.add(newSection);
-                } else {
-                  sections.add(newSection);
-                }
-                currentLevel = level;
-              }
-            }
-          }
-        }
-        
-        // Update the current index based on the insert length
-        if (op.containsKey('insert')) {
-          final insert = op['insert'];
-          if (insert is String) {
-            currentIndex += insert.length;
-          }
-        }
+      // Handle empty document with just a newline
+      if (doc.length <= 1 && doc.root.children.isEmpty != false) {
+        print('Document is empty (only newline)');
+        setState(() {
+          _sections = [];
+        });
+        return;
       }
 
+      // Iterate through each line
+      var index = 0;
+      doc.root.children.forEach((block) {
+        final attrs = block.style.attributes;
+        final text = block.toPlainText().trim();
+
+        // Check if this is a header
+        if (attrs[Attribute.header.key] != null && text.isNotEmpty) {
+          final level = attrs[Attribute.header.key] as int;
+          print('Found header level $level: $text');
+
+          // Create new section
+          final section = DocumentSection(
+            title: text,
+            level: level,
+            index: index++,
+          );
+
+          // Add to sections list
+          sections.add(section);
+        }
+      });
+
+      print('Parsed ${sections.length} sections');
       setState(() {
         _sections = sections;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('Error parsing sections: $e');
+      print('Stack trace: $stackTrace');
       setState(() {
         _sections = [];
       });
     }
   }
 
-  DocumentSection? _findParentSection(List<DocumentSection> sections, int targetLevel) {
-    for (var section in sections.reversed) {
-      if (section.level == targetLevel) {
-        return section;
-      }
-      final parent = _findParentSection(section.subsections, targetLevel);
-      if (parent != null) {
-        return parent;
-      }
-    }
-    return null;
-  }
-
   Future<void> _addNewSection({DocumentSection? parent}) async {
-    final result = await showDialog<String>(
+    final formKey = GlobalKey<FormState>();
+    String sectionTitle = '';
+
+    final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
         title: Text('Add ${parent != null ? 'Subsection' : 'Section'}'),
-        content: TextField(
-          controller: _newSectionController,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'Title',
-            hintText: 'Enter section title',
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Title',
+              hintText: 'Enter section title',
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a section title';
+              }
+              return null;
+            },
+            onSaved: (value) {
+              sectionTitle = value ?? '';
+            },
+            onFieldSubmitted: (value) {
+              if (formKey.currentState?.validate() ?? false) {
+                formKey.currentState?.save();
+                Navigator.of(dialogContext).pop(true);
+              }
+            },
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, _newSectionController.text),
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                formKey.currentState?.save();
+                Navigator.of(dialogContext).pop(true);
+              }
+            },
             child: const Text('Add'),
           ),
         ],
       ),
     );
 
-    if (result != null && result.isNotEmpty) {
+    if (result == true && sectionTitle.isNotEmpty) {
       try {
+        print('Adding new section: $sectionTitle');
         final level = parent != null ? parent.level + 1 : 1;
-        final docJson = jsonDecode(widget.document.content);
-        final doc = Document.fromJson(docJson);
-        
-        // Create header block
-        final delta = Delta()
-          ..insert(result)
-          ..insert('\n', {'header': level});
-        
-        // If we have a parent, insert after it and its subsections
-        if (parent != null) {
-          int insertIndex = parent.index;
-          for (var subsection in parent.subsections) {
-            if (subsection.index > insertIndex) {
-              insertIndex = subsection.index;
-            }
-          }
-          delta.retain(insertIndex + 1);  // +1 for the newline
+
+        // Get the current document content from the bloc
+        final currentState = context.read<DocumentBloc>().state;
+        if (currentState is! DocumentLoaded) {
+          print('Document not loaded in bloc');
+          return;
         }
-        
+
+        final currentContent = currentState.document.document.content;
+        final docJson = currentContent.isEmpty
+            ? [
+                {"insert": "\n"}
+              ]
+            : jsonDecode(currentContent);
+
+        print('Current document content from bloc: $docJson');
+        final doc = Document.fromJson(docJson);
+        final length = doc.length;
+
+        // Create delta for the new section
+        final delta = Delta()
+          ..retain(length > 0 ? length - 1 : 0) // Go to end of document
+          ..insert('\n') // Add newline before header
+          ..insert(sectionTitle) // Add section title
+          ..insert('\n', {'header': level}) // Add header attribute
+          ..insert('\n'); // Add extra newline after header
+
+        // Apply the changes
         doc.compose(delta, ChangeSource.local);
-        
+
         // Update document content
         final updatedContent = jsonEncode(doc.toDelta().toJson());
-        
-        // Save the document
-        context.read<DocumentBloc>().add(UpdateDocument(
-          documentId: widget.document.id,
-          content: updatedContent,
-        ));
-        
-        _parseSections();
-      } catch (e) {
-        print('Error adding section: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error adding section: $e')),
-        );
-      }
-    }
-    _newSectionController.clear();
-  }
+        print('Updated document content: $updatedContent');
 
-    void _updateSectionOrder() {
-    try {
-      final delta = Delta()
-        ..retain(0); // Start at the beginning
-      
-      // Create a new document with sections in the new order
-      for (var section in _sections) {
-        delta.insert(section.title);
-        delta.insert('\n', {'header': section.level});
-        
-        // Add subsections
-        for (var subsection in section.subsections) {
-          delta.insert(subsection.title);
-          delta.insert('\n', {'header': subsection.level});
+        // Update the document through the bloc
+        context.read<DocumentBloc>().add(UpdateDocument(
+              documentId: widget.document.id,
+              content: updatedContent,
+            ));
+
+        // Notify parent of content change
+        if (widget.onContentChanged != null) {
+          widget.onContentChanged!(updatedContent);
+        }
+
+        // Update local state
+        setState(() {
+          _parseSections();
+        });
+      } catch (e, stackTrace) {
+        print('Error adding section: $e');
+        print('Stack trace: $stackTrace');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error adding section: $e')),
+          );
         }
       }
-      
-      // Create new document with the reordered content
-      final doc = Document.fromDelta(delta);
+    }
+  }
+
+  Future<void> _updateSectionOrder() async {
+    try {
+      // Get the current document content from the bloc
+      final currentState = context.read<DocumentBloc>().state;
+      if (currentState is! DocumentLoaded) {
+        print('Document not loaded in bloc');
+        return;
+      }
+
+      // Create a new document with sections in the new order
+      final doc = Document();
+
+      for (var i = 0; i < _sections.length; i++) {
+        final section = _sections[i];
+        if (i > 0) doc.insert(doc.length, '\n');
+        doc.insert(doc.length, section.title);
+        doc.format(doc.length - section.title.length, section.title.length,
+            Attribute.h1); // Use predefined header attribute
+      }
+
+      // Add final newline if needed
+      if (doc.length == 0 || !doc.toPlainText().endsWith('\n')) {
+        doc.insert(doc.length, '\n');
+      }
+
+      // Update document content
       final updatedContent = jsonEncode(doc.toDelta().toJson());
-      
-      // Save the document
+      print('Reordered document content: $updatedContent');
+
+      // Update the document through the bloc
       context.read<DocumentBloc>().add(UpdateDocument(
-        documentId: widget.document.id,
-        content: updatedContent,
-      ));
-    } catch (e) {
+            documentId: widget.document.id,
+            content: updatedContent,
+          ));
+
+      // Notify parent of content change
+      if (widget.onContentChanged != null) {
+        widget.onContentChanged!(updatedContent);
+      }
+    } catch (e, stackTrace) {
       print('Error updating section order: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating section order: $e')),
-      );
+      print('Stack trace: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating section order: $e')),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Header
-        Container(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            children: [
-              const Text(
-                'Document Structure',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+    return BlocListener<DocumentBloc, DocumentState>(
+      listener: (context, state) {
+        if (state is DocumentLoaded) {
+          // Update sections when document content changes
+          if (state.document.document.content != widget.document.content) {
+            print('Document content changed in bloc, updating sections');
+            _parseSections();
+          }
+        }
+      },
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                const Text(
+                  'Document Structure',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.add),
-                tooltip: 'Add Section',
-                onPressed: () => _addNewSection(),
-              ),
-            ],
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  tooltip: 'Add Section',
+                  onPressed: () => _addNewSection(),
+                ),
+              ],
+            ),
           ),
-        ),
-        const Divider(),
-        // Section List
-        Expanded(
-          child: _sections.isEmpty
-              ? const Center(
-                  child: Text('No sections found'),
-                )
-              : ReorderableListView.builder(
-                  itemCount: _sections.length,
-                  onReorder: (oldIndex, newIndex) {
-                    setState(() {
-                      if (newIndex > oldIndex) {
-                        newIndex -= 1;
-                      }
-                      final item = _sections.removeAt(oldIndex);
-                      _sections.insert(newIndex, item);
-                      _updateSectionOrder();
-                    });
-                  },
-                  itemBuilder: (context, index) {
-                    return _buildSectionTile(_sections[index], index);
-                  },
-                ),
-        ),
-      ],
+          const Divider(),
+          // Section List
+          Expanded(
+            child: _sections.isEmpty
+                ? const Center(
+                    child: Text('No sections found'),
+                  )
+                : ReorderableListView.builder(
+                    itemCount: _sections.length,
+                    onReorder: (oldIndex, newIndex) {
+                      setState(() {
+                        if (newIndex > oldIndex) {
+                          newIndex -= 1;
+                        }
+                        final item = _sections.removeAt(oldIndex);
+                        _sections.insert(newIndex, item);
+                        _updateSectionOrder();
+                      });
+                    },
+                    itemBuilder: (context, index) {
+                      return _buildSectionTile(_sections[index], index);
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -102,10 +102,8 @@ class StorageService {
     if (treeJson == null) return [];
 
     try {
-      final treeData = jsonDecode(treeJson) as List;
-      return treeData.map<DocumentNode>((nodeData) {
-        return DocumentNode.fromJson(nodeData as Map<String, dynamic>);
-      }).toList();
+      final treeData = jsonDecode(treeJson) as List<dynamic>;
+      return treeData.map((node) => DocumentNode.fromJson(node as Map<String, dynamic>)).toList();
     } catch (e) {
       print('Error loading project tree: $e');
       return [];

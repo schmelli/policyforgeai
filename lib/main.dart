@@ -1,43 +1,60 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'blocs/document_tree/document_tree_bloc.dart';
-import 'blocs/document/document_bloc.dart';
-import 'blocs/settings/settings_bloc.dart';
-import 'blocs/chat/chat_bloc.dart';
+import 'package:flutter_quill/flutter_quill.dart';
+import 'dart:convert';
 import 'models/project.dart';
 import 'models/document.dart';
 import 'models/settings.dart';
+import 'blocs/document/document_bloc.dart';
+import 'blocs/document_tree/document_tree_bloc.dart';
+import 'blocs/settings/settings_bloc.dart';
+import 'blocs/chat/chat_bloc.dart';
 import 'services/storage_service.dart';
 import 'services/ai_service.dart';
 import 'widgets/document_tree.dart';
-import 'widgets/project_selection_dialog.dart';
-import 'widgets/settings_panel.dart';
-import 'widgets/chat_panel.dart';
 import 'widgets/document_structure.dart';
+import 'widgets/chat_panel.dart';
+import 'widgets/settings_panel.dart';
+import 'widgets/project_selection_dialog.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  final storageService = StorageService();
-  await storageService.initialize();
 
-  final settings = await storageService.loadProjectSettings('default');
-  final aiService = AIService(
-    apiKey: settings?.aiSettings.apiKey ?? const String.fromEnvironment('OPENAI_API_KEY'),
-    model: settings?.aiSettings.model ?? 'gpt-3.5-turbo',
-    temperature: settings?.aiSettings.temperature ?? 0.7,
-    maxTokens: settings?.aiSettings.maxTokens ?? 1000,
-  );
+  try {
+    final storageService = StorageService();
+    await storageService.initialize();
 
-  runApp(
-    MultiRepositoryProvider(
-      providers: [
-        RepositoryProvider.value(value: storageService),
-        RepositoryProvider.value(value: aiService),
-      ],
-      child: MyApp(storageService: storageService),
-    ),
-  );
+    final settings = await storageService.loadProjectSettings('default');
+    final aiService = AIService(
+      apiKey: settings?.aiSettings.apiKey ??
+          const String.fromEnvironment('OPENAI_API_KEY'),
+      model: settings?.aiSettings.model ?? 'gpt-3.5-turbo',
+      temperature: settings?.aiSettings.temperature ?? 0.7,
+      maxTokens: settings?.aiSettings.maxTokens ?? 1000,
+    );
+
+    runApp(
+      MultiRepositoryProvider(
+        providers: [
+          RepositoryProvider.value(value: storageService),
+          RepositoryProvider.value(value: aiService),
+        ],
+        child: MyApp(storageService: storageService),
+      ),
+    );
+  } catch (e, stackTrace) {
+    print('Error initializing app: $e');
+    print(stackTrace);
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text('Error initializing app: $e'),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -52,6 +69,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'PolicyForge AI',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blue,
@@ -73,7 +91,38 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       themeMode: ThemeMode.system,
-      home: ProjectSelectionScreen(storageService: storageService),
+      home: Builder(
+        builder: (context) {
+          try {
+            return ProjectSelectionScreen(storageService: storageService);
+          } catch (e, stackTrace) {
+            print('Error building ProjectSelectionScreen: $e');
+            print(stackTrace);
+            return Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Error: $e'),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                MyApp(storageService: storageService),
+                          ),
+                        );
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+        },
+      ),
     );
   }
 }
@@ -105,21 +154,38 @@ class ProjectSelectionScreen extends StatelessWidget {
                   const SizedBox(height: 32),
                   FilledButton.icon(
                     onPressed: () async {
-                      final project = Project.create(
-                        name: 'New Project',
-                        description: 'A new policy management project',
-                        createdBy: 'current-user', // TODO: Get from auth
-                      );
-                      await storageService.saveProject(project);
-                      if (context.mounted) {
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(
-                            builder: (context) => ProjectWorkspace(
-                              storageService: storageService,
-                              projectId: project.id,
-                            ),
-                          ),
+                      try {
+                        final project = Project.create(
+                          name: 'New Project',
+                          description: 'A new policy management project',
+                          createdBy: 'current-user',
                         );
+                        await storageService.saveProject(project);
+                        if (context.mounted) {
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(
+                              builder: (context) => ProjectWorkspace(
+                                project: project,
+                              ),
+                            ),
+                          );
+                        }
+                      } catch (e, stackTrace) {
+                        print('Error creating project: $e');
+                        print(stackTrace);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error creating project: $e'),
+                              action: SnackBarAction(
+                                label: 'Retry',
+                                onPressed: () {
+                                  // Retry button pressed
+                                },
+                              ),
+                            ),
+                          );
+                        }
                       }
                     },
                     icon: const Icon(Icons.add),
@@ -128,20 +194,37 @@ class ProjectSelectionScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   OutlinedButton.icon(
                     onPressed: () async {
-                      final projects = await storageService.listProjects();
-                      if (context.mounted) {
-                        final selectedProject = await showDialog<Project>(
-                          context: context,
-                          builder: (context) => ProjectSelectionDialog(
-                            projects: projects,
-                          ),
-                        );
-                        if (selectedProject != null && context.mounted) {
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(
-                              builder: (context) => ProjectWorkspace(
-                                storageService: storageService,
-                                projectId: selectedProject.id,
+                      try {
+                        final projects = await storageService.listProjects();
+                        if (context.mounted) {
+                          final selectedProject = await showDialog<Project>(
+                            context: context,
+                            builder: (context) => ProjectSelectionDialog(
+                              projects: projects,
+                            ),
+                          );
+                          if (selectedProject != null && context.mounted) {
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (context) => ProjectWorkspace(
+                                  project: selectedProject,
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      } catch (e, stackTrace) {
+                        print('Error loading projects: $e');
+                        print(stackTrace);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error loading projects: $e'),
+                              action: SnackBarAction(
+                                label: 'Retry',
+                                onPressed: () {
+                                  // Retry button pressed
+                                },
                               ),
                             ),
                           );
@@ -162,13 +245,11 @@ class ProjectSelectionScreen extends StatelessWidget {
 }
 
 class ProjectWorkspace extends StatefulWidget {
-  final StorageService storageService;
-  final String projectId;
+  final Project project;
 
   const ProjectWorkspace({
     super.key,
-    required this.storageService,
-    required this.projectId,
+    required this.project,
   });
 
   @override
@@ -176,176 +257,265 @@ class ProjectWorkspace extends StatefulWidget {
 }
 
 class _ProjectWorkspaceState extends State<ProjectWorkspace> {
-  int _selectedIndex = 0;
   late final DocumentTreeBloc _documentTreeBloc;
   late final DocumentBloc _documentBloc;
   late final SettingsBloc _settingsBloc;
   late final ChatBloc _chatBloc;
+  late QuillController _quillController;
+  late FocusNode _focusNode;
+  bool _initialized = false;
 
   @override
   void initState() {
     super.initState();
+    _quillController = QuillController(
+      document: Document(),
+      selection: const TextSelection.collapsed(offset: 0),
+    );
+    _focusNode = FocusNode();
+
+    // Initialize blocs
+    final storageService = context.read<StorageService>();
+    final aiService = context.read<AIService>();
+
     _documentTreeBloc = DocumentTreeBloc(
-      storageService: widget.storageService,
-      projectId: widget.projectId,
+      storageService: storageService,
+      projectId: widget.project.id,
     );
     _documentBloc = DocumentBloc(
-      storageService: widget.storageService,
-      projectId: widget.projectId,
+      storageService: storageService,
+      projectId: widget.project.id,
     );
     _settingsBloc = SettingsBloc(
-      storageService: widget.storageService,
-      projectId: widget.projectId,
+      storageService: storageService,
+      projectId: widget.project.id,
     );
     _chatBloc = ChatBloc(
-      aiService: context.read<AIService>(),
-      storageService: widget.storageService,
-      documentId: '',
+      aiService: aiService,
+      storageService: storageService,
+      documentId: '', // We'll update this when a document is selected
     );
-    _documentTreeBloc.add(LoadDocumentTree(widget.projectId));
-    _settingsBloc.add(LoadSettings(widget.projectId));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _documentTreeBloc.add(LoadDocumentTree(widget.project.id));
+      _initialized = true;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Row(
-        children: [
-          // Navigation Rail
-          NavigationRail(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (int index) {
-              setState(() {
-                _selectedIndex = index;
-              });
-            },
-            labelType: NavigationRailLabelType.all,
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.folder_outlined),
-                selectedIcon: Icon(Icons.folder),
-                label: Text('Documents'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.settings_outlined),
-                selectedIcon: Icon(Icons.settings),
-                label: Text('Settings'),
-              ),
-            ],
-          ),
-          // Main Content
-          Expanded(
-            child: MultiBlocProvider(
-              providers: [
-                BlocProvider.value(value: _documentTreeBloc),
-                BlocProvider.value(value: _documentBloc),
-                BlocProvider.value(value: _settingsBloc),
-                BlocProvider.value(value: _chatBloc),
-              ],
-              child: _selectedIndex == 0
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider.value(value: _documentTreeBloc),
+        BlocProvider.value(value: _documentBloc),
+        BlocProvider.value(value: _settingsBloc),
+        BlocProvider.value(value: _chatBloc),
+      ],
+      child: Scaffold(
+        body: BlocBuilder<DocumentTreeBloc, DocumentTreeState>(
+          builder: (context, state) {
+            if (state is DocumentTreeLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (state is DocumentTreeLoaded) {
+              final selectedNode = state.selectedNode;
+
+              return Row(
+                children: [
+                  // Vertical Button Bar
+                  Container(
+                    width: 48,
+                    decoration: BoxDecoration(
+                      border: Border(
+                        right: BorderSide(
+                          color: Theme.of(context).dividerColor,
+                        ),
+                      ),
+                    ),
+                    child: Column(
                       children: [
-                        // File Explorer Panel
-                        SizedBox(
-                          width: 250,
-                          child: Card(
-                            margin: const EdgeInsets.all(8.0),
-                            child: BlocBuilder<DocumentTreeBloc, DocumentTreeState>(
-                              builder: (context, state) {
-                                if (state is DocumentTreeLoaded) {
-                                  return DocumentTree(
-                                    nodes: state.nodes,
-                                    onCreateFolder: (String name, String? parentId) {
-                                      _documentTreeBloc.add(CreateFolder(name, parentId: parentId));
-                                    },
-                                    onCreateDocument: (String name, String? parentId) {
-                                      _documentTreeBloc.add(CreateDocument(name, parentId: parentId));
-                                    },
-                                    onNodeSelected: (node) {
-                                      _documentTreeBloc.add(SelectNode(node));
-                                    },
-                                  );
-                                }
-                                if (state is DocumentTreeError) {
-                                  return Center(
-                                    child: Text(
-                                      'Error: ${state.message}',
-                                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        IconButton(
+                          icon: const Icon(Icons.add),
+                          onPressed: () async {
+                            final formKey = GlobalKey<FormState>();
+                            String documentName = '';
+
+                            final result = await showDialog<bool>(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (dialogContext) => AlertDialog(
+                                title: const Text('Create New Document'),
+                                content: Form(
+                                  key: formKey,
+                                  child: TextFormField(
+                                    autofocus: true,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Document Name',
+                                      hintText: 'Enter document name',
                                     ),
-                                  );
-                                }
-                                return const Center(child: CircularProgressIndicator());
-                              },
-                            ),
-                          ),
-                        ),
-                        // Document Structure Panel
-                        SizedBox(
-                          width: 250,
-                          child: Card(
-                            margin: const EdgeInsets.all(8.0),
-                            child: BlocBuilder<DocumentTreeBloc, DocumentTreeState>(
-                              builder: (context, state) {
-                                if (state is DocumentTreeLoaded && 
-                                    state.selectedNode != null && 
-                                    state.selectedNode is DocumentLeafNode) {
-                                  final document = (state.selectedNode as DocumentLeafNode).document;
-                                  return DocumentStructure(
-                                    document: document as PolicyDocument,
-                                  );
-                                }
-                                return const Center(
-                                  child: Text('Select a document to view its structure'),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        // Document Viewer Panel
-                        Expanded(
-                          child: Card(
-                            margin: const EdgeInsets.all(8.0),
-                            child: BlocBuilder<DocumentTreeBloc, DocumentTreeState>(
-                              builder: (context, state) {
-                                if (state is DocumentTreeLoaded &&
-                                    state.selectedNode != null &&
-                                    state.selectedNode is DocumentLeafNode) {
-                                  final document = (state.selectedNode as DocumentLeafNode).document;
-                                  _chatBloc.add(LoadChat(document.id));
-                                  return DocumentViewer(
-                                    document: document,
-                                    onSave: (String content) {
-                                      _documentBloc.add(UpdateDocument(
-                                        documentId: document.id,
-                                        content: content,
-                                      ));
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Please enter a document name';
+                                      }
+                                      return null;
                                     },
-                                  );
-                                }
-                                return const Center(
-                                  child: Text('Select a document to view'),
-                                );
-                              },
-                            ),
-                          ),
+                                    onSaved: (value) {
+                                      documentName = value ?? '';
+                                    },
+                                    onFieldSubmitted: (value) {
+                                      if (formKey.currentState?.validate() ??
+                                          false) {
+                                        formKey.currentState?.save();
+                                        Navigator.of(dialogContext).pop(true);
+                                      }
+                                    },
+                                  ),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      if (formKey.currentState?.validate() ??
+                                          false) {
+                                        formKey.currentState?.save();
+                                        Navigator.of(dialogContext).pop(true);
+                                      }
+                                    },
+                                    child: const Text('Create'),
+                                  ),
+                                ],
+                              ),
+                            );
+
+                            if (result == true && documentName.isNotEmpty) {
+                              final document = PolicyDocument.create(
+                                title: documentName,
+                                projectId: widget.project.id,
+                                createdBy: 'current-user',
+                              );
+
+                              _documentTreeBloc.add(CreateDocument(
+                                document.title,
+                                projectId: widget.project.id,
+                                parentId: null,
+                              ));
+
+                              _documentBloc.add(UpdateDocument(
+                                documentId: document.id,
+                                content: document.content,
+                              ));
+                            }
+                          },
                         ),
-                        // Chat Panel
-                        SizedBox(
-                          width: 300,
-                          child: ChatPanel(),
+                        IconButton(
+                          icon: const Icon(Icons.settings),
+                          onPressed: () {
+                            // TODO: Implement settings
+                          },
                         ),
                       ],
-                    )
-                  : const Card(
-                      margin: EdgeInsets.all(8.0),
-                      child: SettingsPanel(),
                     ),
-            ),
-          ),
-        ],
+                  ),
+                  const VerticalDivider(width: 1),
+                  // Document Tree
+                  SizedBox(
+                    width: 250,
+                    child: DocumentTree(
+                      nodes: state.nodes,
+                      selectedId: state.selectedNode?.id,
+                      onNodeSelected: (id) {
+                        final node = _findNodeById(state.nodes, id);
+                        if (node != null) {
+                          _documentTreeBloc.add(SelectNode(node));
+                          if (node is DocumentLeafNode) {
+                            _documentBloc.add(LoadDocument(node));
+                          }
+                        }
+                      },
+                      onNodeMoved: (node, newParentId) {
+                        _documentTreeBloc.add(
+                          MoveNode(
+                            node: node,
+                            newParentId: newParentId,
+                          ),
+                        );
+                      },
+                      projectId: widget.project.id,
+                    ),
+                  ),
+                  const VerticalDivider(width: 1),
+                  // Document Structure (Navigation)
+                  if (selectedNode is DocumentLeafNode)
+                    SizedBox(
+                      width: 250,
+                      child: DocumentStructure(
+                        key: ValueKey((selectedNode).document.id),
+                        document: (selectedNode).document,
+                        projectId: widget.project.id,
+                        onContentChanged: (content) {
+                          _documentBloc.add(
+                            UpdateDocument(
+                              documentId: selectedNode.id,
+                              content: content,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  const VerticalDivider(width: 1),
+                  // Document Viewer
+                  Expanded(
+                    child: selectedNode is DocumentLeafNode
+                        ? BlocBuilder<DocumentBloc, DocumentState>(
+                            builder: (context, docState) {
+                              if (docState is DocumentLoaded &&
+                                  docState.document.id == selectedNode.id) {
+                                return QuillEditor(
+                                  controller: _quillController,
+                                  focusNode: _focusNode,
+                                  scrollController: ScrollController(),
+                                );
+                              }
+                              return const Center(
+                                  child: CircularProgressIndicator());
+                            },
+                          )
+                        : const Center(
+                            child: Text('Select a document to view'),
+                          ),
+                  ),
+                ],
+              );
+            }
+
+            return const Center(
+              child: Text(
+                  'No documents found. Create one using the + button above.'),
+            );
+          },
+        ),
       ),
     );
+  }
+
+  DocumentNode? _findNodeById(List<DocumentNode> nodes, String id) {
+    for (final node in nodes) {
+      if (node.id == id) return node;
+      if (node is FolderNode) {
+        final found = _findNodeById(node.children, id);
+        if (found != null) return found;
+      }
+    }
+    return null;
   }
 
   @override
@@ -354,57 +524,76 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
     _documentBloc.close();
     _settingsBloc.close();
     _chatBloc.close();
+    _quillController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 }
 
-class DocumentViewer extends StatelessWidget {
-  final PolicyDocument document;
-  final void Function(String)? onSave;
+class DocumentViewer extends StatefulWidget {
+  final PolicyDocument? document;
 
   const DocumentViewer({
     super.key,
-    required this.document,
-    this.onSave,
+    this.document,
   });
 
   @override
+  State<DocumentViewer> createState() => _DocumentViewerState();
+}
+
+class _DocumentViewerState extends State<DocumentViewer> {
+  late QuillController _controller;
+  late FocusNode _focusNode;
+  final bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = QuillController(
+      document: Document(),
+      selection: const TextSelection.collapsed(offset: 0),
+    );
+    _focusNode = FocusNode();
+    _updateDocument();
+  }
+
+  void _updateDocument() {
+    if (widget.document != null) {
+      try {
+        final doc = Document.fromJson(jsonDecode(widget.document!.content));
+        _controller.document = doc;
+      } catch (e) {
+        print('Error updating document: $e');
+        _controller.document = Document();
+      }
+    } else {
+      _controller.document = Document();
+    }
+  }
+
+  @override
+  void didUpdateWidget(DocumentViewer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.document?.id != oldWidget.document?.id ||
+        widget.document?.content != oldWidget.document?.content) {
+      _updateDocument();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        AppBar(
-          title: Text(document.title),
-          centerTitle: true,
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.save),
-              onPressed: onSave != null
-                  ? () => _handleSaveDocument(context)
-                  : null,
-            ),
-          ],
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: TextEditingController(text: document.content),
-              maxLines: null,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                hintText: 'Start typing...',
-              ),
-              onChanged: onSave,
-            ),
-          ),
-        ),
-      ],
+    return QuillEditor(
+      controller: _controller,
+      focusNode: _focusNode,
+      scrollController: ScrollController(),
     );
   }
 
-  void _handleSaveDocument(BuildContext context) {
-    if (onSave != null) {
-      onSave!(document.content);
-    }
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
   }
 }

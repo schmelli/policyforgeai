@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:json_annotation/json_annotation.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:convert';
 
 part 'document.g.dart';
 
@@ -49,10 +50,11 @@ class PolicyDocument extends Equatable {
     List<String> tags = const [],
   }) {
     final now = DateTime.now();
+    final emptyContent = jsonEncode([{"insert": "\n"}]);
     return PolicyDocument(
       id: const Uuid().v4(),
       title: title,
-      content: '',
+      content: emptyContent,
       createdAt: now,
       modifiedAt: now,
       createdBy: createdBy,

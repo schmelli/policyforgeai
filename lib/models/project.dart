@@ -139,8 +139,14 @@ abstract class DocumentNode extends Equatable {
       'createdAt': createdAt.toIso8601String(),
       'modifiedAt': modifiedAt.toIso8601String(),
       'createdBy': createdBy,
-      'type': runtimeType.toString().toLowerCase(),
+      'type': _getNodeType(),
     };
+  }
+
+  String _getNodeType() {
+    if (this is FolderNode) return 'folder';
+    if (this is DocumentLeafNode) return 'document';
+    throw Exception('Unknown node type: ${runtimeType.toString()}');
   }
 
   @override
