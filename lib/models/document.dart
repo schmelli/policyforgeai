@@ -48,13 +48,18 @@ class PolicyDocument extends Equatable {
     required String createdBy,
     required String projectId,
     List<String> tags = const [],
+    String? initialContent,
   }) {
     final now = DateTime.now();
-    final emptyContent = jsonEncode([{"insert": "\n"}]);
+    final content = initialContent ?? jsonEncode({
+      'ops': [
+        {'insert': '\n'}
+      ]
+    });
     return PolicyDocument(
       id: const Uuid().v4(),
       title: title,
-      content: emptyContent,
+      content: content,
       createdAt: now,
       modifiedAt: now,
       createdBy: createdBy,

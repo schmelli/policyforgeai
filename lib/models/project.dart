@@ -247,6 +247,7 @@ class DocumentLeafNode extends DocumentNode {
     required String createdBy,
     required String projectId,
     String? parentId,
+    String? content,
   }) {
     final now = DateTime.now();
     final id = const Uuid().v4();
@@ -261,6 +262,7 @@ class DocumentLeafNode extends DocumentNode {
         title: name,
         createdBy: createdBy,
         projectId: projectId,
+        initialContent: content,
       ),
     );
   }

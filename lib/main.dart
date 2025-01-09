@@ -12,6 +12,8 @@ import 'services/ai_service.dart';
 import 'widgets/document_tree.dart';
 import 'widgets/document_viewer.dart';
 import 'widgets/project_selection_dialog.dart';
+import 'widgets/new_project_button.dart';
+import 'widgets/open_project_button.dart';
 import 'utils/logger.dart';
 
 void main() async {
@@ -153,108 +155,9 @@ class ProjectSelectionScreen extends StatelessWidget {
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 32),
-                  FilledButton.icon(
-                    onPressed: () async {
-                      try {
-                        // Create project and initial document
-                        final project = Project.create(
-                          name: 'New Project',
-                          description: 'A new policy management project',
-                          createdBy: 'current-user',
-                        );
-
-                        // Create document node
-                        final node = DocumentLeafNode.create(
-                          name: 'Welcome',
-                          createdBy: 'current-user',
-                          projectId: project.id,
-                        );
-
-                        // Create initial settings
-                        final settings = ProjectSettings.defaults();
-
-                        // Save everything
-                        await storageService.saveProject(project);
-                        await storageService.saveDocument(
-                            project.id, node.document);
-                        await storageService.saveProjectTree(project.id, [node]);
-                        await storageService.saveProjectSettings(
-                            project.id, settings);
-
-                        appLogger.i('Project loaded successfully');
-                        appLogger.d('Project content: $project');
-
-                        if (context.mounted) {
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(
-                              builder: (context) => ProjectWorkspace(
-                                projectId: project.id,
-                              ),
-                            ),
-                          );
-                        }
-                      } catch (e, stackTrace) {
-                        appLogger.e('Error creating project', error: e, stackTrace: stackTrace);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error creating project: $e'),
-                              action: SnackBarAction(
-                                label: 'Retry',
-                                onPressed: () {
-                                  // Retry button pressed
-                                },
-                              ),
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('Create New Project'),
-                  ),
+                  NewProjectButton(storageService: storageService),
                   const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      try {
-                        final projects = await storageService.listProjects();
-                        if (context.mounted) {
-                          final selectedProject = await showDialog<Project>(
-                            context: context,
-                            builder: (context) => ProjectSelectionDialog(
-                              projects: projects,
-                            ),
-                          );
-                          if (selectedProject != null && context.mounted) {
-                            Navigator.of(context).pushReplacement(
-                              MaterialPageRoute(
-                                builder: (context) => ProjectWorkspace(
-                                  projectId: selectedProject.id,
-                                ),
-                              ),
-                            );
-                          }
-                        }
-                      } catch (e, stackTrace) {
-                        appLogger.e('Error loading projects', error: e, stackTrace: stackTrace);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Error loading projects: $e'),
-                              action: SnackBarAction(
-                                label: 'Retry',
-                                onPressed: () {
-                                  // Retry button pressed
-                                },
-                              ),
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    icon: const Icon(Icons.folder_open),
-                    label: const Text('Open Existing Project'),
-                  ),
+                  OpenProjectButton(storageService: storageService),
                 ],
               ),
             ),

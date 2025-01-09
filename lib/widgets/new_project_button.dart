@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import '../models/project.dart';
+import '../models/settings.dart';
+import '../models/document.dart';
 import '../services/storage_service.dart';
 import '../pages/project_workspace.dart';
+import '../utils/logger.dart';
+import 'dart:convert';
 
 class NewProjectButton extends StatelessWidget {
   final StorageService storageService;
@@ -15,12 +19,12 @@ class NewProjectButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return FilledButton.icon(
       onPressed: () async {
-        print('New Project button pressed');
+        appLogger.i('New Project button pressed');
         final formKey = GlobalKey<FormState>();
         String projectName = '';
         String projectDescription = '';
 
-        print('Showing dialog...');
+        appLogger.i('Showing new project dialog');
         final shouldCreate = await showDialog<bool>(
           context: context,
           barrierDismissible: false,
@@ -73,18 +77,17 @@ class NewProjectButton extends StatelessWidget {
             actions: [
               TextButton(
                 onPressed: () {
-                  print('Cancel pressed');
+                  appLogger.i('Project creation cancelled');
                   Navigator.of(dialogContext).pop(false);
                 },
                 child: const Text('Cancel'),
               ),
-              TextButton(
+              FilledButton(
                 onPressed: () {
-                  print('Create pressed');
+                  appLogger.i('Create project button pressed');
                   if (formKey.currentState?.validate() ?? false) {
                     formKey.currentState?.save();
-                    print(
-                        'Form validated, name: $projectName, desc: $projectDescription');
+                    appLogger.i('Form validated, creating project "$projectName"');
                     Navigator.of(dialogContext).pop(true);
                   }
                 },
@@ -94,16 +97,45 @@ class NewProjectButton extends StatelessWidget {
           ),
         );
 
-        print('Dialog result: $shouldCreate');
+        appLogger.i('Dialog result: $shouldCreate');
         if (shouldCreate == true) {
           try {
-            print('Creating project...');
+            appLogger.i('Creating new project "$projectName"');
             final project = Project.create(
               name: projectName,
               description: projectDescription,
               createdBy: 'current-user',
             );
+
+            // Create initial welcome document
+            final welcomeContent = '''# Welcome to your new project!
+
+Getting Started
+--------------
+• Create new documents using the + button in the sidebar
+• Organize your documents into folders
+• Use the AI assistant to help you write and edit
+
+Need help? Click the help icon in the top right corner.''';
+
+            final node = DocumentLeafNode.create(
+              name: 'Welcome',
+              createdBy: 'current-user',
+              projectId: project.id,
+              content: welcomeContent,
+            );
+
+            // Create initial settings
+            final settings = ProjectSettings.defaults();
+
+            // Save everything
             await storageService.saveProject(project);
+            await storageService.saveDocument(project.id, node.document);
+            await storageService.saveProjectTree(project.id, [node]);
+            await storageService.saveProjectSettings(project.id, settings);
+
+            appLogger.i('Project created successfully');
+
             if (context.mounted) {
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(
@@ -114,8 +146,7 @@ class NewProjectButton extends StatelessWidget {
               );
             }
           } catch (e, stackTrace) {
-            print('Error creating project: $e');
-            print(stackTrace);
+            appLogger.e('Error creating project: $e', error: e, stackTrace: stackTrace);
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(

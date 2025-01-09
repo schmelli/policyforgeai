@@ -53,7 +53,7 @@ class _DocumentViewerState extends State<DocumentViewer> {
         widget.document.id,
       );
       setState(() {
-        _content = content ?? '';
+        _content = content ?? widget.document.content;
         _isLoading = false;
       });
     } catch (e) {
