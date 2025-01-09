@@ -30,7 +30,7 @@ class OpenProjectButton extends StatelessWidget {
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(
                   builder: (context) => ProjectWorkspace(
-                    project: selectedProject,
+                    projectId: selectedProject.id,
                   ),
                 ),
               );

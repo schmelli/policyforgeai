@@ -49,8 +49,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
     _projectNameController.text = settings.projectName;
     _organizationNameController.text = settings.organizationName;
     _organizationIdController.text = settings.organizationId;
-    _apiKeyController.text = settings.aiSettings.apiKey ?? '';
-    _modelController.text = settings.aiSettings.model;
+    _apiKeyController.text = settings.aiSettings.llmConfig.apiKey ?? '';
+    _modelController.text = settings.aiSettings.llmConfig.model;
     _temperatureController.text = settings.aiSettings.temperature.toString();
     _maxTokensController.text = settings.aiSettings.maxTokens.toString();
   }
@@ -72,7 +72,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Project Information Section
                 _buildSection(
                   context,
@@ -103,7 +103,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
                     ),
                   ],
                 ),
-                
+
                 // Feature Toggles Section
                 _buildSection(
                   context,
@@ -111,7 +111,8 @@ class _SettingsPanelState extends State<SettingsPanel> {
                   [
                     SwitchListTile(
                       title: const Text('AI Assistance'),
-                      subtitle: const Text('Enable AI-powered document assistance'),
+                      subtitle:
+                          const Text('Enable AI-powered document assistance'),
                       value: state.settings.aiEnabled,
                       onChanged: (value) {
                         context.read<SettingsBloc>().add(
@@ -151,7 +152,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
                     ),
                   ],
                 ),
-                
+
                 // AI Configuration Section
                 if (state.settings.aiEnabled)
                   _buildSection(
@@ -259,13 +260,17 @@ class _SettingsPanelState extends State<SettingsPanel> {
                     FilledButton(
                       onPressed: () async {
                         try {
+                          if (!mounted) return;
                           final settings = state.settings.copyWith(
                             projectName: _projectNameController.text,
                             organizationName: _organizationNameController.text,
                             organizationId: _organizationIdController.text,
                             aiSettings: state.settings.aiSettings.copyWith(
-                              apiKey: _apiKeyController.text,
-                              model: _modelController.text,
+                              llmConfig:
+                                  state.settings.aiSettings.llmConfig.copyWith(
+                                apiKey: _apiKeyController.text,
+                                model: _modelController.text,
+                              ),
                               temperature: double.tryParse(
                                     _temperatureController.text,
                                   ) ??
@@ -280,6 +285,7 @@ class _SettingsPanelState extends State<SettingsPanel> {
                               SettingsValidator.validateProjectSettings(
                                   settings);
                           if (!validation.isValid) {
+                            if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(validation.errorMessage),
@@ -294,12 +300,14 @@ class _SettingsPanelState extends State<SettingsPanel> {
                               .read<SettingsBloc>()
                               .add(UpdateSettings(settings));
 
+                          if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Settings saved successfully'),
                             ),
                           );
                         } catch (e) {
+                          if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Failed to save settings: $e'),
@@ -316,17 +324,22 @@ class _SettingsPanelState extends State<SettingsPanel> {
                         OutlinedButton(
                           onPressed: () async {
                             try {
+                              if (!mounted) return;
                               await SettingsExportService.exportSettings(
                                   state.settings);
+                              if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Settings exported successfully'),
+                                  content:
+                                      Text('Settings exported successfully'),
                                 ),
                               );
                             } catch (e) {
+                              if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Failed to export settings: $e'),
+                                  content:
+                                      Text('Failed to export settings: $e'),
                                   backgroundColor:
                                       Theme.of(context).colorScheme.error,
                                 ),
@@ -339,12 +352,14 @@ class _SettingsPanelState extends State<SettingsPanel> {
                         OutlinedButton(
                           onPressed: () async {
                             try {
+                              if (!mounted) return;
                               final settings =
                                   await SettingsExportService.importSettings();
                               if (settings != null) {
                                 context
                                     .read<SettingsBloc>()
                                     .add(UpdateSettings(settings));
+                                if (!mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content:
@@ -353,9 +368,11 @@ class _SettingsPanelState extends State<SettingsPanel> {
                                 );
                               }
                             } catch (e) {
+                              if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Failed to import settings: $e'),
+                                  content:
+                                      Text('Failed to import settings: $e'),
                                   backgroundColor:
                                       Theme.of(context).colorScheme.error,
                                 ),

@@ -162,10 +162,10 @@ class DocumentTreeBloc extends Bloc<DocumentTreeEvent, DocumentTreeState> {
       );
 
       await _storageService.saveProjectTree(_projectId, updatedNodes);
-      
+
       // Reload the tree to ensure we have the latest state
       final reloadedNodes = await _storageService.loadProjectTree(_projectId);
-      
+
       emit(currentState.copyWith(
         nodes: reloadedNodes,
         selectedNode: newFolder, // Automatically select the new folder
@@ -206,11 +206,12 @@ class DocumentTreeBloc extends Bloc<DocumentTreeEvent, DocumentTreeState> {
       await _storageService.saveProjectTree(event.projectId, updatedNodes);
 
       // Then save the document content
-      await _storageService.saveDocument(event.projectId, newDocument);
-      
+      await _storageService.saveDocument(event.projectId, newDocument.document);
+
       // Reload the tree to ensure we have the latest state
-      final reloadedNodes = await _storageService.loadProjectTree(event.projectId);
-      
+      final reloadedNodes =
+          await _storageService.loadProjectTree(event.projectId);
+
       // Finally, emit the new state with the updated tree
       emit(currentState.copyWith(
         nodes: reloadedNodes,
@@ -242,10 +243,10 @@ class DocumentTreeBloc extends Bloc<DocumentTreeEvent, DocumentTreeState> {
 
     final currentState = state as DocumentTreeLoaded;
     final List<DocumentNode> updatedNodes = List.from(currentState.nodes);
-    
+
     // Remove node from its current parent
     _removeNodeFromParent(updatedNodes, event.node.id);
-    
+
     // Add node to new parent
     if (event.newParentId == null) {
       // Move to root
@@ -328,7 +329,8 @@ class DocumentTreeBloc extends Bloc<DocumentTreeEvent, DocumentTreeState> {
     return null;
   }
 
-  void _replaceNode(List<DocumentNode> nodes, String nodeId, DocumentNode newNode) {
+  void _replaceNode(
+      List<DocumentNode> nodes, String nodeId, DocumentNode newNode) {
     for (var i = 0; i < nodes.length; i++) {
       if (nodes[i].id == nodeId) {
         nodes[i] = newNode;

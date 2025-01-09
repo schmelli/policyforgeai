@@ -1,6 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
-import '../../models/project.dart';
+import '../../models/document.dart';
 import '../../services/storage_service.dart';
 
 /// Events for the document bloc
@@ -13,7 +13,7 @@ abstract class DocumentEvent extends Equatable {
 
 /// Event to load a document
 class LoadDocument extends DocumentEvent {
-  final DocumentLeafNode document;
+  final PolicyDocument document;
 
   const LoadDocument(this.document);
 
@@ -56,7 +56,7 @@ class DocumentLoading extends DocumentState {}
 
 /// Loaded state with document
 class DocumentLoaded extends DocumentState {
-  final DocumentLeafNode document;
+  final PolicyDocument document;
   final bool isDirty;
 
   const DocumentLoaded({
@@ -66,7 +66,7 @@ class DocumentLoaded extends DocumentState {
 
   /// Creates a copy with the given fields replaced
   DocumentLoaded copyWith({
-    DocumentLeafNode? document,
+    PolicyDocument? document,
     bool? isDirty,
   }) {
     return DocumentLoaded(
@@ -137,23 +137,16 @@ class DocumentBloc extends Bloc<DocumentEvent, DocumentState> {
 
     try {
       final currentState = state as DocumentLoaded;
-      final currentDoc = currentState.document.document;
-
-      final updatedDocument = currentDoc.copyWith(
+      final updatedDocument = currentState.document.copyWith(
         content: event.content,
         modifiedAt: DateTime.now(),
       );
 
-      final updatedNode = currentState.document.copyWith(
-        modifiedAt: DateTime.now(),
-        document: updatedDocument,
-      );
-
       // Save the updated document to storage
-      await _storageService.saveDocument(projectId, updatedNode);
+      await _storageService.saveDocument(projectId, updatedDocument);
 
       emit(DocumentLoaded(
-        document: updatedNode,
+        document: updatedDocument,
         isDirty: false,
       ));
     } catch (e) {

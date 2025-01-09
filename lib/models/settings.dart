@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'llm_provider.dart';
 
 /// Represents project-wide settings for a PolicyForge project
 class ProjectSettings extends Equatable {
@@ -51,7 +52,8 @@ class ProjectSettings extends Equatable {
       organizationId: organizationId ?? this.organizationId,
       aiEnabled: aiEnabled ?? this.aiEnabled,
       collaborationEnabled: collaborationEnabled ?? this.collaborationEnabled,
-      versionControlEnabled: versionControlEnabled ?? this.versionControlEnabled,
+      versionControlEnabled:
+          versionControlEnabled ?? this.versionControlEnabled,
       allowedFileTypes: allowedFileTypes ?? this.allowedFileTypes,
       customMetadata: customMetadata ?? this.customMetadata,
       aiSettings: aiSettings ?? this.aiSettings,
@@ -77,16 +79,19 @@ class ProjectSettings extends Equatable {
   factory ProjectSettings.fromJson(Map<String, dynamic> json) {
     return ProjectSettings(
       projectName: json['projectName'] as String? ?? 'New Project',
-      organizationName: json['organizationName'] as String? ?? 'Default Organization',
+      organizationName:
+          json['organizationName'] as String? ?? 'Default Organization',
       organizationId: json['organizationId'] as String? ?? 'default-org',
       aiEnabled: json['aiEnabled'] as bool? ?? true,
       collaborationEnabled: json['collaborationEnabled'] as bool? ?? false,
       versionControlEnabled: json['versionControlEnabled'] as bool? ?? false,
-      allowedFileTypes: (json['allowedFileTypes'] as List<dynamic>?)?.cast<String>() ?? 
-          const ['md', 'txt', 'doc', 'docx', 'pdf'],
-      customMetadata: json['customMetadata'] as Map<String, dynamic>? ?? const {},
-      aiSettings: json['aiSettings'] != null 
-          ? AISettings.fromJson(json['aiSettings'] as Map<String, dynamic>) 
+      allowedFileTypes:
+          (json['allowedFileTypes'] as List<dynamic>?)?.cast<String>() ??
+              const ['md', 'txt', 'doc', 'docx', 'pdf'],
+      customMetadata:
+          json['customMetadata'] as Map<String, dynamic>? ?? const {},
+      aiSettings: json['aiSettings'] != null
+          ? AISettings.fromJson(json['aiSettings'] as Map<String, dynamic>)
           : const AISettings(),
     );
   }
@@ -107,31 +112,31 @@ class ProjectSettings extends Equatable {
 
 /// Represents AI-specific settings for a PolicyForge project
 class AISettings extends Equatable {
-  final String? apiKey;
-  final String model;
+  final LLMConfig llmConfig;
   final double temperature;
   final int maxTokens;
   final bool streamResponses;
 
   const AISettings({
-    this.apiKey,
-    this.model = 'gpt-3.5-turbo',
+    this.llmConfig = const LLMConfig(
+      provider: LLMProvider.ollama,
+      model: 'llama2',
+      baseUrl: 'http://localhost:11434/api/chat',
+    ),
     this.temperature = 0.7,
     this.maxTokens = 1000,
-    this.streamResponses = true,
+    this.streamResponses = false,
   });
 
   /// Creates a copy of this AI settings with the given fields replaced
   AISettings copyWith({
-    String? apiKey,
-    String? model,
+    LLMConfig? llmConfig,
     double? temperature,
     int? maxTokens,
     bool? streamResponses,
   }) {
     return AISettings(
-      apiKey: apiKey ?? this.apiKey,
-      model: model ?? this.model,
+      llmConfig: llmConfig ?? this.llmConfig,
       temperature: temperature ?? this.temperature,
       maxTokens: maxTokens ?? this.maxTokens,
       streamResponses: streamResponses ?? this.streamResponses,
@@ -141,8 +146,10 @@ class AISettings extends Equatable {
   /// Converts this AI settings to a JSON map
   Map<String, dynamic> toJson() {
     return {
-      'apiKey': apiKey,
-      'model': model,
+      'provider': llmConfig.provider.name,
+      'apiKey': llmConfig.apiKey,
+      'model': llmConfig.model,
+      'baseUrl': llmConfig.baseUrl,
       'temperature': temperature,
       'maxTokens': maxTokens,
       'streamResponses': streamResponses,
@@ -151,21 +158,43 @@ class AISettings extends Equatable {
 
   /// Creates an AI settings instance from a JSON map
   factory AISettings.fromJson(Map<String, dynamic> json) {
+    final provider = LLMProvider.values.firstWhere(
+      (e) => e.name == (json['provider'] as String?),
+      orElse: () => LLMProvider.ollama,
+    );
+
+    LLMConfig config;
+    switch (provider) {
+      case LLMProvider.anthropic:
+        config = LLMConfig.anthropic(
+          apiKey: json['apiKey'] as String? ?? '',
+          model: json['model'] as String? ?? 'claude-3-sonnet-20240229',
+        );
+        break;
+      case LLMProvider.openAI:
+        config = LLMConfig.openAI(
+          apiKey: json['apiKey'] as String? ?? '',
+          model: json['model'] as String? ?? 'gpt-3.5-turbo',
+        );
+        break;
+      case LLMProvider.ollama:
+        config = LLMConfig.ollama(
+          model: json['model'] as String? ?? 'llama2',
+          baseUrl:
+              json['baseUrl'] as String? ?? 'http://localhost:11434/api/chat',
+        );
+        break;
+    }
+
     return AISettings(
-      apiKey: json['apiKey'] as String?,
-      model: json['model'] as String? ?? 'gpt-3.5-turbo',
+      llmConfig: config,
       temperature: (json['temperature'] as num?)?.toDouble() ?? 0.7,
       maxTokens: json['maxTokens'] as int? ?? 1000,
-      streamResponses: json['streamResponses'] as bool? ?? true,
+      streamResponses: json['streamResponses'] as bool? ?? false,
     );
   }
 
   @override
-  List<Object?> get props => [
-        apiKey,
-        model,
-        temperature,
-        maxTokens,
-        streamResponses,
-      ];
+  List<Object?> get props =>
+      [llmConfig, temperature, maxTokens, streamResponses];
 }

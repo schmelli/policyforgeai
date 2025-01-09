@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_quill/flutter_quill.dart';
-import 'dart:convert';
 import 'models/project.dart';
-import 'models/document.dart';
 import 'models/settings.dart';
+import 'models/llm_provider.dart';
 import 'blocs/document/document_bloc.dart';
 import 'blocs/document_tree/document_tree_bloc.dart';
 import 'blocs/settings/settings_bloc.dart';
@@ -12,10 +10,9 @@ import 'blocs/chat/chat_bloc.dart';
 import 'services/storage_service.dart';
 import 'services/ai_service.dart';
 import 'widgets/document_tree.dart';
-import 'widgets/document_structure.dart';
-import 'widgets/chat_panel.dart';
-import 'widgets/settings_panel.dart';
+import 'widgets/document_viewer.dart';
 import 'widgets/project_selection_dialog.dart';
+import 'utils/logger.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,12 +23,18 @@ void main() async {
 
     final settings = await storageService.loadProjectSettings('default');
     final aiService = AIService(
-      apiKey: settings?.aiSettings.apiKey ??
-          const String.fromEnvironment('OPENAI_API_KEY'),
-      model: settings?.aiSettings.model ?? 'gpt-3.5-turbo',
+      config: settings?.aiSettings.llmConfig ??
+          const LLMConfig(
+            provider: LLMProvider.ollama,
+            model: 'llama2',
+            baseUrl: 'http://localhost:11434/api/chat',
+          ),
       temperature: settings?.aiSettings.temperature ?? 0.7,
       maxTokens: settings?.aiSettings.maxTokens ?? 1000,
     );
+
+    appLogger.i('Settings loaded successfully');
+    appLogger.d('Settings content: $settings');
 
     runApp(
       MultiRepositoryProvider(
@@ -43,8 +46,7 @@ void main() async {
       ),
     );
   } catch (e, stackTrace) {
-    print('Error initializing app: $e');
-    print(stackTrace);
+    appLogger.e('Error initializing app', error: e, stackTrace: stackTrace);
     runApp(
       MaterialApp(
         home: Scaffold(
@@ -96,8 +98,7 @@ class MyApp extends StatelessWidget {
           try {
             return ProjectSelectionScreen(storageService: storageService);
           } catch (e, stackTrace) {
-            print('Error building ProjectSelectionScreen: $e');
-            print(stackTrace);
+            appLogger.e('Error building ProjectSelectionScreen', error: e, stackTrace: stackTrace);
             return Scaffold(
               body: Center(
                 child: Column(
@@ -155,24 +156,45 @@ class ProjectSelectionScreen extends StatelessWidget {
                   FilledButton.icon(
                     onPressed: () async {
                       try {
+                        // Create project and initial document
                         final project = Project.create(
                           name: 'New Project',
                           description: 'A new policy management project',
                           createdBy: 'current-user',
                         );
+
+                        // Create document node
+                        final node = DocumentLeafNode.create(
+                          name: 'Welcome',
+                          createdBy: 'current-user',
+                          projectId: project.id,
+                        );
+
+                        // Create initial settings
+                        final settings = ProjectSettings.defaults();
+
+                        // Save everything
                         await storageService.saveProject(project);
+                        await storageService.saveDocument(
+                            project.id, node.document);
+                        await storageService.saveProjectTree(project.id, [node]);
+                        await storageService.saveProjectSettings(
+                            project.id, settings);
+
+                        appLogger.i('Project loaded successfully');
+                        appLogger.d('Project content: $project');
+
                         if (context.mounted) {
                           Navigator.of(context).pushReplacement(
                             MaterialPageRoute(
                               builder: (context) => ProjectWorkspace(
-                                project: project,
+                                projectId: project.id,
                               ),
                             ),
                           );
                         }
                       } catch (e, stackTrace) {
-                        print('Error creating project: $e');
-                        print(stackTrace);
+                        appLogger.e('Error creating project', error: e, stackTrace: stackTrace);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -207,15 +229,14 @@ class ProjectSelectionScreen extends StatelessWidget {
                             Navigator.of(context).pushReplacement(
                               MaterialPageRoute(
                                 builder: (context) => ProjectWorkspace(
-                                  project: selectedProject,
+                                  projectId: selectedProject.id,
                                 ),
                               ),
                             );
                           }
                         }
                       } catch (e, stackTrace) {
-                        print('Error loading projects: $e');
-                        print(stackTrace);
+                        appLogger.e('Error loading projects', error: e, stackTrace: stackTrace);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -245,11 +266,11 @@ class ProjectSelectionScreen extends StatelessWidget {
 }
 
 class ProjectWorkspace extends StatefulWidget {
-  final Project project;
+  final String projectId;
 
   const ProjectWorkspace({
     super.key,
-    required this.project,
+    required this.projectId,
   });
 
   @override
@@ -257,52 +278,38 @@ class ProjectWorkspace extends StatefulWidget {
 }
 
 class _ProjectWorkspaceState extends State<ProjectWorkspace> {
+  final StorageService _storageService = StorageService();
   late final DocumentTreeBloc _documentTreeBloc;
   late final DocumentBloc _documentBloc;
   late final SettingsBloc _settingsBloc;
-  late final ChatBloc _chatBloc;
-  late QuillController _quillController;
-  late FocusNode _focusNode;
-  bool _initialized = false;
 
   @override
   void initState() {
     super.initState();
-    _quillController = QuillController(
-      document: Document(),
-      selection: const TextSelection.collapsed(offset: 0),
-    );
-    _focusNode = FocusNode();
-
-    // Initialize blocs
-    final storageService = context.read<StorageService>();
-    final aiService = context.read<AIService>();
-
     _documentTreeBloc = DocumentTreeBloc(
-      storageService: storageService,
-      projectId: widget.project.id,
+      storageService: _storageService,
+      projectId: widget.projectId,
     );
     _documentBloc = DocumentBloc(
-      storageService: storageService,
-      projectId: widget.project.id,
+      storageService: _storageService,
+      projectId: widget.projectId,
     );
     _settingsBloc = SettingsBloc(
-      storageService: storageService,
-      projectId: widget.project.id,
+      storageService: _storageService,
+      projectId: widget.projectId,
     );
-    _chatBloc = ChatBloc(
-      aiService: aiService,
-      storageService: storageService,
-      documentId: '', // We'll update this when a document is selected
-    );
+
+    // Load initial data
+    _documentTreeBloc.add(LoadDocumentTree(widget.projectId));
+    _settingsBloc.add(LoadSettings(widget.projectId));
+    _loadInitialDocument();
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_initialized) {
-      _documentTreeBloc.add(LoadDocumentTree(widget.project.id));
-      _initialized = true;
+  Future<void> _loadInitialDocument() async {
+    final nodes = await _storageService.loadProjectTree(widget.projectId);
+    if (nodes.isNotEmpty && nodes.first is DocumentLeafNode) {
+      final node = nodes.first as DocumentLeafNode;
+      _documentBloc.add(LoadDocument(node.document));
     }
   }
 
@@ -313,7 +320,26 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
         BlocProvider.value(value: _documentTreeBloc),
         BlocProvider.value(value: _documentBloc),
         BlocProvider.value(value: _settingsBloc),
-        BlocProvider.value(value: _chatBloc),
+        BlocProvider(
+          create: (context) {
+            // Get initial document ID from tree state
+            String documentId = widget.projectId;
+            if (_documentTreeBloc.state is DocumentTreeLoaded) {
+              final state = _documentTreeBloc.state as DocumentTreeLoaded;
+              if (state.nodes.isNotEmpty &&
+                  state.nodes.first is DocumentLeafNode) {
+                documentId =
+                    (state.nodes.first as DocumentLeafNode).document.id;
+              }
+            }
+
+            return ChatBloc(
+              aiService: context.read<AIService>(),
+              storageService: _storageService,
+              documentId: documentId,
+            );
+          },
+        ),
       ],
       child: Scaffold(
         body: BlocBuilder<DocumentTreeBloc, DocumentTreeState>(
@@ -397,22 +423,29 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
                             );
 
                             if (result == true && documentName.isNotEmpty) {
-                              final document = PolicyDocument.create(
-                                title: documentName,
-                                projectId: widget.project.id,
-                                createdBy: 'current-user',
-                              );
-
+                              // Create document through the bloc
                               _documentTreeBloc.add(CreateDocument(
-                                document.title,
-                                projectId: widget.project.id,
+                                documentName,
+                                projectId: widget.projectId,
                                 parentId: null,
                               ));
 
-                              _documentBloc.add(UpdateDocument(
-                                documentId: document.id,
-                                content: document.content,
-                              ));
+                              // Wait for the tree to update
+                              await Future.delayed(
+                                  const Duration(milliseconds: 100));
+
+                              // Then load the document if it was created
+                              if (mounted &&
+                                  _documentTreeBloc.state
+                                      is DocumentTreeLoaded) {
+                                final state = _documentTreeBloc.state
+                                    as DocumentTreeLoaded;
+                                final node = state.selectedNode;
+                                if (node is DocumentLeafNode) {
+                                  _documentBloc
+                                      .add(LoadDocument(node.document));
+                                }
+                              }
                             }
                           },
                         ),
@@ -437,7 +470,7 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
                         if (node != null) {
                           _documentTreeBloc.add(SelectNode(node));
                           if (node is DocumentLeafNode) {
-                            _documentBloc.add(LoadDocument(node));
+                            _documentBloc.add(LoadDocument(node.document));
                           }
                         }
                       },
@@ -449,45 +482,16 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
                           ),
                         );
                       },
-                      projectId: widget.project.id,
+                      projectId: widget.projectId,
                     ),
                   ),
-                  const VerticalDivider(width: 1),
-                  // Document Structure (Navigation)
-                  if (selectedNode is DocumentLeafNode)
-                    SizedBox(
-                      width: 250,
-                      child: DocumentStructure(
-                        key: ValueKey((selectedNode).document.id),
-                        document: (selectedNode).document,
-                        projectId: widget.project.id,
-                        onContentChanged: (content) {
-                          _documentBloc.add(
-                            UpdateDocument(
-                              documentId: selectedNode.id,
-                              content: content,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
                   const VerticalDivider(width: 1),
                   // Document Viewer
                   Expanded(
                     child: selectedNode is DocumentLeafNode
-                        ? BlocBuilder<DocumentBloc, DocumentState>(
-                            builder: (context, docState) {
-                              if (docState is DocumentLoaded &&
-                                  docState.document.id == selectedNode.id) {
-                                return QuillEditor(
-                                  controller: _quillController,
-                                  focusNode: _focusNode,
-                                  scrollController: ScrollController(),
-                                );
-                              }
-                              return const Center(
-                                  child: CircularProgressIndicator());
-                            },
+                        ? DocumentViewer(
+                            document: selectedNode.document,
+                            storageService: _storageService,
                           )
                         : const Center(
                             child: Text('Select a document to view'),
@@ -523,77 +527,6 @@ class _ProjectWorkspaceState extends State<ProjectWorkspace> {
     _documentTreeBloc.close();
     _documentBloc.close();
     _settingsBloc.close();
-    _chatBloc.close();
-    _quillController.dispose();
-    _focusNode.dispose();
-    super.dispose();
-  }
-}
-
-class DocumentViewer extends StatefulWidget {
-  final PolicyDocument? document;
-
-  const DocumentViewer({
-    super.key,
-    this.document,
-  });
-
-  @override
-  State<DocumentViewer> createState() => _DocumentViewerState();
-}
-
-class _DocumentViewerState extends State<DocumentViewer> {
-  late QuillController _controller;
-  late FocusNode _focusNode;
-  final bool _initialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = QuillController(
-      document: Document(),
-      selection: const TextSelection.collapsed(offset: 0),
-    );
-    _focusNode = FocusNode();
-    _updateDocument();
-  }
-
-  void _updateDocument() {
-    if (widget.document != null) {
-      try {
-        final doc = Document.fromJson(jsonDecode(widget.document!.content));
-        _controller.document = doc;
-      } catch (e) {
-        print('Error updating document: $e');
-        _controller.document = Document();
-      }
-    } else {
-      _controller.document = Document();
-    }
-  }
-
-  @override
-  void didUpdateWidget(DocumentViewer oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.document?.id != oldWidget.document?.id ||
-        widget.document?.content != oldWidget.document?.content) {
-      _updateDocument();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return QuillEditor(
-      controller: _controller,
-      focusNode: _focusNode,
-      scrollController: ScrollController(),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _focusNode.dispose();
     super.dispose();
   }
 }

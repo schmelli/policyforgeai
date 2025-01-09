@@ -1,45 +1,54 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../models/llm_provider.dart';
 
 class AIService {
-  final String apiKey;
-  final String model;
+  final LLMConfig config;
   final double temperature;
   final int maxTokens;
 
   AIService({
-    required this.apiKey,
-    required this.model,
+    required this.config,
     required this.temperature,
     required this.maxTokens,
   });
 
-  /// Generate a response from the AI model
+  /// Generate a response from the configured LLM
   Future<String> generateResponse({required String message}) async {
+    final requestBody = config.formatMessage(message);
+
+    // Add common parameters
+    requestBody['temperature'] = temperature;
+    if (config.provider != LLMProvider.anthropic) {
+      requestBody['max_tokens'] = maxTokens;
+    }
+
     final response = await http.post(
-      Uri.parse('https://api.openai.com/v1/chat/completions'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $apiKey',
-      },
-      body: jsonEncode({
-        'model': model,
-        'messages': [
-          {
-            'role': 'user',
-            'content': message,
-          }
-        ],
-        'temperature': temperature,
-        'max_tokens': maxTokens,
-      }),
+      Uri.parse(config.baseUrl),
+      headers: config.getHeaders(),
+      body: jsonEncode(requestBody),
     );
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return data['choices'][0]['message']['content'];
+      return config.parseResponse(data);
     } else {
-      throw Exception('Failed to generate response: ${response.body}');
+      final error = jsonDecode(response.body);
+      String errorMessage;
+
+      switch (config.provider) {
+        case LLMProvider.anthropic:
+          errorMessage = error['error']['message'] ?? response.body;
+          break;
+        case LLMProvider.openAI:
+          errorMessage = error['error']['message'] ?? response.body;
+          break;
+        case LLMProvider.ollama:
+          errorMessage = error['error'] ?? response.body;
+          break;
+      }
+
+      throw Exception('Failed to generate response: $errorMessage');
     }
   }
 }

@@ -1,24 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_quill/flutter_quill.dart' hide Text;
-import '../models/project.dart';
-import '../services/document_export_service.dart';
-import '../widgets/share_dialog.dart';
-import 'package:flutter_quill/flutter_quill.dart'
-    show DefaultStyles, DefaultTextBlockStyle, VerticalSpacing;
-import 'dart:convert'; // Import jsonDecode
+import 'dart:async';
+import '../services/storage_service.dart';
+import '../models/document.dart';
+import '../utils/logger.dart';
+import 'markdown_editor.dart';
 
 class DocumentViewer extends StatefulWidget {
-  final DocumentLeafNode? document;
-  final void Function(String content)? onContentChanged;
-  final bool showShareButton;
-  final bool? readOnly;
+  final PolicyDocument document;
+  final StorageService storageService;
+  final Function()? onDocumentChanged;
 
   const DocumentViewer({
     super.key,
-    this.document,
-    this.onContentChanged,
-    this.showShareButton = true,
-    this.readOnly,
+    required this.document,
+    required this.storageService,
+    this.onDocumentChanged,
   });
 
   @override
@@ -26,249 +22,109 @@ class DocumentViewer extends StatefulWidget {
 }
 
 class _DocumentViewerState extends State<DocumentViewer> {
-  QuillController? _controller;
-  final bool _isEditing = false;
+  String _content = '';
+  bool _isLoading = true;
+  Timer? _saveTimer;
 
   @override
   void initState() {
     super.initState();
-    _initializeController();
+    _loadDocument();
+  }
+
+  @override
+  void dispose() {
+    _saveTimer?.cancel();
+    super.dispose();
   }
 
   @override
   void didUpdateWidget(DocumentViewer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.document?.id != widget.document?.id ||
-        oldWidget.readOnly != widget.readOnly) {
-      _initializeController();
-    } else if (oldWidget.document?.document.content !=
-        widget.document?.document.content) {
-      print('Document content changed, updating controller');
-      _updateControllerContent();
+    if (oldWidget.document.id != widget.document.id) {
+      _loadDocument();
     }
   }
 
-  void _initializeController() {
-    if (widget.document != null) {
-      // TODO: Get current user ID from auth service
-      const currentUserId = '';
-      final permissions = widget.document!.document.permissions;
-      final isReadOnly = widget.readOnly ??
-          (permissions.owner != currentUserId &&
-              !permissions.editors.contains(currentUserId));
+  Future<void> _loadDocument() async {
+    try {
+      final content = await widget.storageService.loadDocumentContent(
+        widget.document.projectId,
+        widget.document.id,
+      );
+      setState(() {
+        _content = content ?? '';
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _content = 'Error loading document: $e';
+        _isLoading = false;
+      });
+    }
+  }
 
+  Future<void> _saveDocument(String content) async {
+    // Cancel any pending saves
+    _saveTimer?.cancel();
+    
+    // Start a new timer
+    _saveTimer = Timer(const Duration(milliseconds: 500), () async {
       try {
-        // Parse the document content as JSON
-        final content = widget.document!.document.content;
-        print('Initializing controller with content: $content');
-        final json = content.isEmpty
-            ? [
-                {"insert": "\n"}
-              ]
-            : jsonDecode(content);
-
-        if (_controller != null) {
-          // Update existing controller
-          final doc = Document.fromJson(json);
-          _controller!.document = doc;
-          _controller!.readOnly = isReadOnly;
-        } else {
-          // Create new controller
-          _controller = QuillController(
-            document: Document.fromJson(json),
-            selection: const TextSelection.collapsed(offset: 0),
-          );
-          _controller?.readOnly = isReadOnly;
-          _controller?.addListener(_onTextChanged);
-        }
+        await widget.storageService.saveDocumentContent(
+          widget.document.projectId,
+          widget.document.id,
+          content,
+        );
+        widget.onDocumentChanged?.call();
       } catch (e) {
-        print('Error initializing document: $e');
-        // Initialize with empty document if parsing fails
-        final emptyDoc = Document();
-        if (_controller != null) {
-          _controller!.document = emptyDoc;
-          _controller!.readOnly = isReadOnly;
-        } else {
-          _controller = QuillController(
-            document: emptyDoc,
-            selection: const TextSelection.collapsed(offset: 0),
+        appLogger.e('Error saving document', error: e);
+        // Show error snackbar
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error saving document: $e')),
           );
-          _controller?.readOnly = isReadOnly;
-          _controller?.addListener(_onTextChanged);
         }
       }
-    } else {
-      _controller?.dispose();
-      _controller = null;
-    }
-  }
-
-  void _updateControllerContent() {
-    if (widget.document != null && _controller != null) {
-      try {
-        final content = widget.document!.document.content;
-        print('Updating controller with content: $content');
-        final json = content.isEmpty
-            ? [
-                {"insert": "\n"}
-              ]
-            : jsonDecode(content);
-        final doc = Document.fromJson(json);
-
-        // Preserve cursor position
-        final oldSelection = _controller!.selection;
-
-        // Update document
-        _controller!.document = doc;
-
-        // Restore cursor position if it's still valid
-        if (oldSelection.start <= doc.length &&
-            oldSelection.end <= doc.length) {
-          _controller!.updateSelection(oldSelection, ChangeSource.local);
-        }
-      } catch (e) {
-        print('Error updating document content: $e');
-      }
-    }
-  }
-
-  void _onTextChanged() {
-    if (_controller != null && widget.onContentChanged != null) {
-      // Save the full document JSON to preserve formatting
-      final json = _controller!.document.toDelta().toJson();
-      widget.onContentChanged!(jsonEncode(json));
-    }
-  }
-
-  void _showShareDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => ShareDialog(
-        documentId: widget.document!.id,
-        projectId: widget.document!.document.projectId,
-        createdBy: widget.document!.createdBy,
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.document == null) {
-      return const _EmptyDocumentView();
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
     }
 
     return Column(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: QuillToolbar(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        if (!_controller!.readOnly) ...[
-                          QuillToolbarHistoryButton(
-                            controller: _controller!,
-                            isUndo: true,
-                          ),
-                          QuillToolbarHistoryButton(
-                            controller: _controller!,
-                            isUndo: false,
-                          ),
-                          QuillToolbarToggleStyleButton(
-                            controller: _controller!,
-                            attribute: Attribute.bold,
-                          ),
-                          QuillToolbarToggleStyleButton(
-                            controller: _controller!,
-                            attribute: Attribute.italic,
-                          ),
-                          QuillToolbarToggleStyleButton(
-                            controller: _controller!,
-                            attribute: Attribute.underline,
-                          ),
-                          QuillToolbarClearFormatButton(
-                            controller: _controller!,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
+        // Simple toolbar
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            border: Border(
+              bottom: BorderSide(
+                color: Theme.of(context).dividerColor,
               ),
             ),
-            if (widget.showShareButton)
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: IconButton(
-                  icon: const Icon(Icons.share),
-                  onPressed: _showShareDialog,
-                  tooltip: 'Share Document',
-                ),
+          ),
+          child: Row(
+            children: [
+              Text(
+                widget.document.title,
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-          ],
+            ],
+          ),
         ),
+        // Editor
         Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(8.0),
-            child: QuillEditor(
-              controller: _controller!,
-              scrollController: ScrollController(),
-              focusNode: FocusNode(),
-              configurations: QuillEditorConfigurations(
-                padding: EdgeInsets.zero,
-                autoFocus: false,
-                scrollPhysics: const ClampingScrollPhysics(),
-                enableInteractiveSelection: !_controller!.readOnly,
-                expands: true,
-              ),
-            ),
+          child: MarkdownEditor(
+            initialContent: _content,
+            onChanged: _saveDocument,
           ),
         ),
       ],
-    );
-  }
-}
-
-class _EmptyDocumentView extends StatelessWidget {
-  const _EmptyDocumentView();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.description_outlined,
-            size: 64,
-            color: Theme.of(context).colorScheme.outline,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No document selected',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Select a document from the tree to view or edit it',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.outline,
-                ),
-          ),
-        ],
-      ),
     );
   }
 }

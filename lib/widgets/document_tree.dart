@@ -46,18 +46,17 @@ class _DocumentTreeState extends State<DocumentTree> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DragTarget<DocumentNode>(
-          onWillAcceptWithDetails: (data) {
-            if (data == null) return false;
-            if (data.id == node.id) return false;
+          onWillAcceptWithDetails: (details) {
+            if (details.data.id == node.id) return false;
             // Don't allow dropping onto a document or onto a parent/ancestor
             if (node is DocumentLeafNode) return false;
             return true;
           },
-          onAcceptWithDetails: (data) {
-            widget.onNodeMoved?.call(data, node.id);
+          onAcceptWithDetails: (details) {
+            widget.onNodeMoved?.call(details.data, node.id);
             context.read<DocumentTreeBloc>().add(
                   MoveNode(
-                    node: data,
+                    node: details.data,
                     newParentId: node.id,
                   ),
                 );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'services/storage_service.dart';
 import 'pages/project_selection_screen.dart';
+import 'utils/logger.dart';
 
 class MyApp extends StatelessWidget {
   final StorageService storageService;
@@ -41,8 +42,7 @@ class MyApp extends StatelessWidget {
           try {
             return ProjectSelectionScreen(storageService: storageService);
           } catch (e, stackTrace) {
-            print('Error building ProjectSelectionScreen: $e');
-            print(stackTrace);
+            appLogger.e('Error building ProjectSelectionScreen', error: e, stackTrace: stackTrace);
             return Scaffold(
               body: Center(
                 child: Column(

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/share_service.dart';
-import '../models/document.dart';
 
 class ShareDialog extends StatefulWidget {
   final String documentId;

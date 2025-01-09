@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/share_service.dart';
+import '../services/storage_service.dart';
 import '../widgets/document_viewer.dart';
 import '../models/document.dart';
-import '../models/project.dart';
 
 class SharedDocumentPage extends StatefulWidget {
   final String shareUrl;
@@ -14,6 +14,7 @@ class SharedDocumentPage extends StatefulWidget {
 }
 
 class _SharedDocumentPageState extends State<SharedDocumentPage> {
+  final StorageService _storageService = StorageService();
   bool _isLoading = true;
   String? _error;
   ShareLink? _shareLink;
@@ -110,21 +111,13 @@ class _SharedDocumentPageState extends State<SharedDocumentPage> {
         ],
       ),
       body: DocumentViewer(
-        document: DocumentLeafNode(
-          id: _document!.id,
-          name: _document!.title,
-          parentId: null,
-          createdAt: _document!.createdAt,
-          modifiedAt: _document!.modifiedAt,
-          createdBy: _document!.createdBy,
-          document: _document!,
-        ),
-        readOnly: _shareLink?.permission != SharePermission.edit,
-        onContentChanged: (content) {
-          if (_shareLink?.permission == SharePermission.edit) {
-            // TODO: Save document changes
-          }
-        },
+        document: _document!,
+        storageService: _storageService,
+        onDocumentChanged: _shareLink?.permission == SharePermission.edit
+            ? () {
+                // TODO: Handle document changes
+              }
+            : null,
       ),
     );
   }

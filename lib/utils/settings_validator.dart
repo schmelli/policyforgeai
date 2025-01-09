@@ -12,12 +12,13 @@ class SettingsValidator {
     final errors = <String>[];
 
     // Validate API Key
-    if (settings.apiKey != null && settings.apiKey!.isEmpty) {
+    if (settings.llmConfig.apiKey != null &&
+        settings.llmConfig.apiKey!.isEmpty) {
       errors.add('API Key cannot be empty if provided');
     }
 
     // Validate model
-    if (!_supportedModels.contains(settings.model)) {
+    if (!_supportedModels.contains(settings.llmConfig.model)) {
       errors.add(
         'Unsupported model. Must be one of: ${_supportedModels.join(", ")}',
       );
